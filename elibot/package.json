@@ -1,0 +1,11 @@
+{
+  "type": "module",
+  "scripts": {
+    "register": "node scripts/register-commands.js",
+    "register:guild": "node scripts/register-commands.js guild"
+  },
+  "dependencies": {
+    "discord-interactions": "^4.0.0",
+    "undici": "^6.19.8"
+  }
+}
