@@ -1,23 +1,27 @@
 import { verifyKey } from "discord-interactions";
 
-function json(obj, status = 200) {
-  return {
-    statusCode: status,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(obj)
-  };
-}
+const VERSION = "v6"; // לזיהוי בלוגים
+
+const json = (obj, status = 200) => ({
+  statusCode: status,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(obj)
+});
 
 export async function handler(event) {
-  const v = "v5";
-  console.log("start", v, { method: event.httpMethod, b64: !!event.isBase64Encoded });
+  console.log("start", VERSION, { method: event.httpMethod, b64: !!event.isBase64Encoded });
 
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method Not Allowed" };
-  }
+  if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
   const sig = event.headers["x-signature-ed25519"];
   const ts  = event.headers["x-signature-timestamp"];
+  console.log("hdrs", { hasSig: !!sig, hasTs: !!ts });
+
+  // אם אין בכלל כותרות חתימה – תחזיר 401 מייד
+  if (!sig || !ts) {
+    console.log("missing signature headers");
+    return { statusCode: 401, body: "Missing signature headers" };
+  }
 
   const raw = event.isBase64Encoded
     ? Buffer.from(event.body || "", "base64")
@@ -25,8 +29,7 @@ export async function handler(event) {
 
   let ok = false;
   try {
-    // 👇👇👇 ה־await הוא הקריטי פה
-    ok = await verifyKey(raw, sig, ts, process.env.DISCORD_PUBLIC_KEY);
+    ok = await verifyKey(raw, sig, ts, process.env.DISCORD_PUBLIC_KEY); // חשוב ה־await
   } catch (e) {
     console.log("verifyKey error", String(e));
   }
