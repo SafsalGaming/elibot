@@ -1,19 +1,50 @@
+// netlify/functions/discord.js
 import { verifyKey } from "discord-interactions";
 import { createClient } from "@supabase/supabase-js";
+
 const ALLOWED_GAMBLING_CHANNEL = "1418196736958005361";
 const GAMBLING_CMDS = new Set(["coinflip", "dice", "daily", "work"]);
-
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 const json = (obj, status = 200) => ({
   statusCode: status,
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(obj)
+  body: JSON.stringify(obj),
 });
 
 const HOUR = 60 * 60 * 1000;
 const DAY  = 24 * HOUR;
+
+/** שמירת שם פעם אחת בלבד */
+async function ensureUsernameOnce(userId, displayName) {
+  if (!displayName) return;
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("username")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) { console.log("sb select username err:", error.message); return; }
+
+  if (!data) {
+    const { error: insErr } = await supabase
+      .from("users")
+      .insert({ id: userId, username: displayName, balance: 100, last_daily: null, last_work: null });
+    if (insErr) console.log("sb insert user err:", insErr.message);
+    return;
+  }
+
+  if (data.username == null) {
+    const { error: upErr } = await supabase
+      .from("users")
+      .update({ username: displayName })
+      .eq("id", userId)
+      .is("username", null);
+    if (upErr) console.log("sb update username err:", upErr.message);
+  }
+}
 
 async function getUser(userId) {
   const { data } = await supabase.from("users").select("*").eq("id", userId).maybeSingle();
@@ -36,21 +67,41 @@ export async function handler(event) {
   const ts  = event.headers["x-signature-timestamp"];
   if (!sig || !ts) return { statusCode: 401, body: "Missing signature headers" };
 
-  const raw = event.isBase64Encoded ? Buffer.from(event.body || "", "base64")
-                                    : Buffer.from(event.body || "", "utf8");
+  const raw = event.isBase64Encoded
+    ? Buffer.from(event.body || "", "base64")
+    : Buffer.from(event.body || "", "utf8");
 
   let ok = false;
   try { ok = await verifyKey(raw, sig, ts, process.env.DISCORD_PUBLIC_KEY); } catch {}
   if (!ok) return { statusCode: 401, body: "Bad request signature" };
 
   const body = JSON.parse(raw.toString("utf8"));
-  if (body?.type === 1) return json({ type: 1 }); // PING
 
+  // Ping
+  if (body?.type === 1) return json({ type: 1 });
+
+  // ApplicationCommand
   if (body?.type === 2) {
-    const cmd = body.data.name;
+    const cmd  = body.data.name;
     const opts = Object.fromEntries((body.data.options || []).map(o => [o.name, o.value]));
-    const userId = body.member?.user?.id || body.user?.id;
+    const userId   = body.member?.user?.id || body.user?.id;
     const username = body.member?.user?.username || body.user?.username || "חבר";
+
+    // שם תצוגה (Nick / Global Name / Username)
+    const display =
+      body.member?.nick ||
+      body.member?.user?.global_name ||
+      body.user?.global_name ||
+      username;
+
+    // נשמור שם פעם אחת בלבד
+    await ensureUsernameOnce(userId, display);
+
+    // הגבלת ערוץ להימורים
+    const channelId = body.channel_id;
+    if (GAMBLING_CMDS.has(cmd) && channelId && channelId !== ALLOWED_GAMBLING_CHANNEL) {
+      return json({ type: 4, data: { content: `🎲 הימורים רק בחדר <#${ALLOWED_GAMBLING_CHANNEL}>` } });
+    }
 
     // /balance
     if (cmd === "balance") {
@@ -58,7 +109,7 @@ export async function handler(event) {
       return json({ type: 4, data: { content: `💰 ${username}, היתרה שלך: **${u.balance}** מטבעות` } });
     }
 
-    // /daily (+50, 24h)
+    // /daily (+50, כל 24 שעות)
     if (cmd === "daily") {
       const now = Date.now();
       const u = await getUser(userId);
@@ -76,21 +127,7 @@ export async function handler(event) {
       return json({ type: 4, data: { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${balance}**` } });
     }
 
-    // מזהה הצ'אנל שבו הופעלה הפקודה (בגילד אינטראקציות יש channel_id)
-const channelId = body.channel_id;
-
-// אם זו פקודת הימורים וצ'אנל לא מותר – נחסום עם הודעה וקישור לצ'אנל הנכון
-if (GAMBLING_CMDS.has(cmd) && channelId && channelId !== ALLOWED_GAMBLING_CHANNEL) {
-  return json({
-    type: 4,
-    data: {
-      content: `🎲<#${ALLOWED_GAMBLING_CHANNEL}> הימורים רק בחדר`,
-    }
-  });
-}
-
-    
-    // /work (+10, 1h)
+    // /work (+10, כל שעה)
     if (cmd === "work") {
       const now = Date.now();
       const u = await getUser(userId);
@@ -112,6 +149,7 @@ if (GAMBLING_CMDS.has(cmd) && channelId && channelId !== ALLOWED_GAMBLING_CHANNE
     if (cmd === "coinflip") {
       const choice = String(opts.choice || "").toLowerCase();
       const amount = parseInt(opts.amount, 10);
+
       if (!["heads", "tails"].includes(choice)) {
         return json({ type: 4, data: { content: `❌ בחירה לא תקינה. בחר heads או tails.` } });
       }
@@ -137,41 +175,40 @@ if (GAMBLING_CMDS.has(cmd) && channelId && channelId !== ALLOWED_GAMBLING_CHANNE
       }
     }
 
-    // /dice guess amount (d6, payout x5 על פגיעה מדויקת)
+    // /dice amount  (d6 vs bot: גדול יותר מנצח ומכפיל)
     if (cmd === "dice") {
-  const amount = body.data.options.find(o => o.name === "amount").value;
+      const amount = parseInt(opts.amount, 10);
+      if (!Number.isInteger(amount) || amount <= 0) {
+        return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
+      }
 
-  const { data } = await supabase
-    .from("users")
-    .select("balance")
-    .eq("id", userId)
-    .maybeSingle();
+      const { data } = await supabase.from("users").select("balance").eq("id", userId).maybeSingle();
+      let balance = data?.balance ?? 100;
+      if (balance < amount) {
+        return json({ type: 4, data: { content: `${username}, אין לך מספיק מטבעות 🎲` } });
+      }
 
-  let balance = data?.balance ?? 100;
-  if (balance < amount) {
-    return json({ type: 4, data: { content: `${username}, אין לך מספיק מטבעות 🎲` } });
-  }
+      const userRoll = Math.floor(Math.random() * 6) + 1;
+      const botRoll  = Math.floor(Math.random() * 6) + 1;
 
-  const userRoll = Math.floor(Math.random() * 6) + 1;
-  const botRoll = Math.floor(Math.random() * 6) + 1;
-
-  if (userRoll > botRoll) {
-    balance += amount; // מכפיל הרווח
-    await supabase.from("users").upsert({ id: userId, balance });
-    return json({ type: 4, data: { content: `🎲 ${username} גלגל ${userRoll}, הבוט גלגל ${botRoll}. ניצחת! זכית בעוד ${amount} → יתרה: ${balance}` } });
-  } else if (userRoll < botRoll) {
-    balance -= amount;
-    await supabase.from("users").upsert({ id: userId, balance });
-    return json({ type: 4, data: { content: `🎲 ${username} גלגל ${userRoll}, הבוט גלגל ${botRoll}. הפסדת ${amount} → יתרה: ${balance}` } });
-  } else {
-    return json({ type: 4, data: { content: `🎲 ${username} גלגל ${userRoll}, הבוט גלגל ${botRoll}. תיקו! אין שינוי ביתרה (${balance})` } });
-  }
+      if (userRoll > botRoll) {
+        balance += amount;
+        await supabase.from("users").upsert({ id: userId, balance });
+        return json({ type: 4, data: { content: `🎲 אתה: **${userRoll}**, בוט: **${botRoll}** — ניצחת! +${amount}. יתרה: **${balance}**` } });
+      } else if (userRoll < botRoll) {
+        balance -= amount;
+        await supabase.from("users").upsert({ id: userId, balance });
+        return json({ type: 4, data: { content: `🎲 אתה: **${userRoll}**, בוט: **${botRoll}** — הפסדת... -${amount}. יתרה: **${balance}**` } });
+      } else {
+        return json({ type: 4, data: { content: `🎲 תיקו! אתה: **${userRoll}**, בוט: **${botRoll}** — אין שינוי (יתרה: ${balance})` } });
+      }
     }
 
     // /give user amount
     if (cmd === "give") {
-      const target = opts.user; // user id
+      const target = opts.user;
       const amount = parseInt(opts.amount, 10);
+
       if (!target || target === userId) {
         return json({ type: 4, data: { content: `❌ משתמש לא תקין.` } });
       }
@@ -186,7 +223,8 @@ if (GAMBLING_CMDS.has(cmd) && channelId && channelId !== ALLOWED_GAMBLING_CHANNE
 
       const receiver = await getUser(target);
       const senderBal = u.balance - amount;
-      const recvBal = (receiver.balance ?? 100) + amount;
+      const recvBal   = (receiver.balance ?? 100) + amount;
+
       await setUser(userId, { balance: senderBal });
       await setUser(target,  { balance: recvBal });
 
@@ -205,15 +243,13 @@ if (GAMBLING_CMDS.has(cmd) && channelId && channelId !== ALLOWED_GAMBLING_CHANNE
         return json({ type: 4, data: { content: `אין עדיין נתונים ללוח הובלות.` } });
       }
 
-      const lines = data.map((u, i) => `**${i+1}.** <@${u.id}> — ${u.balance}`);
+      const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${u.balance}`);
       return json({ type: 4, data: { content: `🏆 טופ 10 עשירים:\n${lines.join("\n")}` } });
     }
 
     return json({ type: 4, data: { content: `הפקודה לא מוכרת.` } });
   }
 
+  // ברירת מחדל
   return json({ type: 5 });
 }
-
-
-
