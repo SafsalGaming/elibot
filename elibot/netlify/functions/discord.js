@@ -139,32 +139,33 @@ if (GAMBLING_CMDS.has(cmd) && channelId && channelId !== ALLOWED_GAMBLING_CHANNE
 
     // /dice guess amount (d6, payout x5 על פגיעה מדויקת)
     if (cmd === "dice") {
-      const guess = parseInt(opts.guess, 10);
-      const amount = parseInt(opts.amount, 10);
-      if (!Number.isInteger(guess) || guess < 1 || guess > 6) {
-        return json({ type: 4, data: { content: `❌ ניחוש חייב להיות בין 1 ל־6.` } });
-      }
-      if (!Number.isInteger(amount) || amount <= 0) {
-        return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
-      }
+  const amount = body.data.options.find(o => o.name === "amount").value;
 
-      const u = await getUser(userId);
-      if (amount > u.balance) {
-        return json({ type: 4, data: { content: `❌ אין לך מספיק מטבעות. היתרה שלך: ${u.balance}.` } });
-      }
+  const { data } = await supabase
+    .from("users")
+    .select("balance")
+    .eq("id", userId)
+    .maybeSingle();
 
-      const roll = 1 + Math.floor(Math.random() * 6);
-      let balance = u.balance;
-      if (roll === guess) {
-        const win = amount * 5; // house edge קל
-        balance += win;
-        await setUser(userId, { balance });
-        return json({ type: 4, data: { content: `🎲 יצא **${roll}** — בול! זכית **+${win}**. יתרה: **${balance}**` } });
-      } else {
-        balance -= amount;
-        await setUser(userId, { balance });
-        return json({ type: 4, data: { content: `🎲 יצא **${roll}** — פספוס. הפסדת **-${amount}**. יתרה: **${balance}**` } });
-      }
+  let balance = data?.balance ?? 100;
+  if (balance < amount) {
+    return json({ type: 4, data: { content: `${username}, אין לך מספיק מטבעות 🎲` } });
+  }
+
+  const userRoll = Math.floor(Math.random() * 6) + 1;
+  const botRoll = Math.floor(Math.random() * 6) + 1;
+
+  if (userRoll > botRoll) {
+    balance += amount; // מכפיל הרווח
+    await supabase.from("users").upsert({ id: userId, balance });
+    return json({ type: 4, data: { content: `🎲 ${username} גלגל ${userRoll}, הבוט גלגל ${botRoll}. ניצחת! זכית בעוד ${amount} → יתרה: ${balance}` } });
+  } else if (userRoll < botRoll) {
+    balance -= amount;
+    await supabase.from("users").upsert({ id: userId, balance });
+    return json({ type: 4, data: { content: `🎲 ${username} גלגל ${userRoll}, הבוט גלגל ${botRoll}. הפסדת ${amount} → יתרה: ${balance}` } });
+  } else {
+    return json({ type: 4, data: { content: `🎲 ${username} גלגל ${userRoll}, הבוט גלגל ${botRoll}. תיקו! אין שינוי ביתרה (${balance})` } });
+  }
     }
 
     // /give user amount
@@ -213,5 +214,6 @@ if (GAMBLING_CMDS.has(cmd) && channelId && channelId !== ALLOWED_GAMBLING_CHANNE
 
   return json({ type: 5 });
 }
+
 
 
