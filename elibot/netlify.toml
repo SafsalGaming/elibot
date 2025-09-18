@@ -1,6 +1,7 @@
 [build]
-  base = "elibot"
-  command = ""
+  base = "."
+  command = "npm run build"
   publish = "."
+
 [functions]
   node_bundler = "esbuild"
