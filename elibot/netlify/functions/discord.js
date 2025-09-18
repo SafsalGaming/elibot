@@ -41,11 +41,46 @@ export async function handler(event) {
   console.log("type", body?.type);
 
   if (body?.type === 1) return json({ type: 1 });
+if (body?.type === 2) {
+  const cmd = body.data?.name;
 
-  if (body?.type === 2 && body.data?.name === "hello") {
-    const user = body.member?.user?.username || body.user?.username || "חבר";
-    return json({ type: 4, data: { content: `הלו הלו ${user} 👋` } });
+  if (cmd === "hello") {
+    const user = body.member?.user?.username || body.user?.username || "friend";
+    return json({ type: 4, data: { content: `Hello ${user} 👋` } });
   }
+
+  if (cmd === "balance") {
+    return json({ type: 4, data: { content: `You have 100 coins 💰` } });
+  }
+
+  if (cmd === "daily") {
+    return json({ type: 4, data: { content: `You claimed your daily 50 coins! 🤑` } });
+  }
+
+  if (cmd === "coinflip") {
+    const choice = body.data.options.find(o => o.name === "choice").value;
+    const amount = body.data.options.find(o => o.name === "amount").value;
+    const flip = Math.random() < 0.5 ? "heads" : "tails";
+    const win = flip === choice;
+    return json({
+      type: 4,
+      data: {
+        content: `Coin landed on **${flip}**. You ${win ? `won ${amount} 🎉` : `lost ${amount} 😢`}`
+      }
+    });
+  }
+
+  if (cmd === "give") {
+    const user = body.data.options.find(o => o.name === "user").value;
+    const amount = body.data.options.find(o => o.name === "amount").value;
+    return json({
+      type: 4,
+      data: { content: `Gave <@${user}> ${amount} coins 🤝` }
+    });
+  }
+}
+
 
   return json({ type: 5 });
 }
+
