@@ -14,17 +14,16 @@ const API = "https://discord.com/api/v10";
 const headers = {
   "Authorization": `Bot ${TOKEN}`,
   "Content-Type": "application/json",
-  "User-Agent": "DiscordBot (register,1.0)"
+  "User-Agent": "DiscordBot (register,1.0)",
 };
 
-// ההגדרה של הפקודות
 const commands = [
   { name: "balance", description: "Show your coin balance", type: 1 },
-  { name: "daily", description: "Claim daily bonus", type: 1 },
-  { name: "work", description: "Work once per hour for 10 coins", type: 1 },
+  { name: "daily", description: "Claim daily bonus (+50, 24h cooldown)", type: 1 },
+  { name: "work", description: "Work for +10 (1h cooldown)", type: 1 },
   {
     name: "coinflip",
-    description: "Bet on a coin flip",
+    description: "Bet on a coin flip (50/50)",
     type: 1,
     options: [
       {
@@ -34,21 +33,21 @@ const commands = [
         required: true,
         choices: [
           { name: "heads", value: "heads" },
-          { name: "tails", value: "tails" }
-        ]
+          { name: "tails", value: "tails" },
+        ],
       },
       {
         name: "amount",
         description: "Amount to bet",
         type: 4,
         required: true,
-        min_value: 1
-      }
-    ]
+        min_value: 1,
+      },
+    ],
   },
   {
     name: "dice",
-    description: "Roll vs bot",
+    description: "Roll vs bot (higher wins, 1:1)",
     type: 1,
     options: [
       {
@@ -56,9 +55,9 @@ const commands = [
         description: "Amount to bet",
         type: 4,
         required: true,
-        min_value: 1
-      }
-    ]
+        min_value: 1,
+      },
+    ],
   },
   {
     name: "give",
@@ -66,10 +65,10 @@ const commands = [
     type: 1,
     options: [
       { name: "user", description: "Target user", type: 6, required: true },
-      { name: "amount", description: "Amount to give", type: 4, required: true }
-    ]
+      { name: "amount", description: "Amount to give", type: 4, required: true, min_value: 1 },
+    ],
   },
-  { name: "top", description: "Show top 10 richest users", type: 1 }
+  { name: "top", description: "Show top 10 richest users", type: 1 },
 ];
 
 const mode = process.argv.includes("--list") ? "list"
