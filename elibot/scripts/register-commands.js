@@ -4,6 +4,28 @@ import { fetch } from "undici";
 const APP_ID   = process.env.DISCORD_APPLICATION_ID;
 const TOKEN    = process.env.DISCORD_TOKEN;
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
+const userId   = body.member?.user?.id || body.user?.id;
+const username = body.member?.user?.username || body.user?.username || "חבר";
+const disc     = body.member?.user?.discriminator || body.user?.discriminator || null;
+const displayName = disc ? `${username}#${disc}` : username;
+
+await ensureUsernameOnce(userId, displayName);
+
+async function ensureUsernameOnce(userId, displayName) {
+  if (!displayName) return;
+
+  // 1) אם אין משתמש — ניצור אותו עם השם (ונשמור balance התחלתי)
+  await supabase
+    .from("users")
+    .upsert({ id: userId, username: displayName, balance: 100 }, { onConflict: "id", ignoreDuplicates: true });
+
+  // 2) אם יש משתמש אבל username עדיין NULL — נמלא אותו פעם אחת
+  await supbase
+    .from("users")
+    .update({ username: displayName })
+    .eq("id", userId)
+    .is("username", null);
+}
 
 if (!APP_ID || !TOKEN || !GUILD_ID) {
   console.error("Missing APP_ID or TOKEN or GUILD_ID");
@@ -114,4 +136,5 @@ async function main() {
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
+
 
