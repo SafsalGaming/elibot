@@ -1,5 +1,8 @@
 import { verifyKey } from "discord-interactions";
 import { createClient } from "@supabase/supabase-js";
+const ALLOWED_GAMBLING_CHANNEL = "1418196736958005361";
+const GAMBLING_CMDS = new Set(["coinflip", "dice", "daily", "work"]);
+
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
@@ -73,6 +76,20 @@ export async function handler(event) {
       return json({ type: 4, data: { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${balance}**` } });
     }
 
+    // מזהה הצ'אנל שבו הופעלה הפקודה (בגילד אינטראקציות יש channel_id)
+const channelId = body.channel_id;
+
+// אם זו פקודת הימורים וצ'אנל לא מותר – נחסום עם הודעה וקישור לצ'אנל הנכון
+if (GAMBLING_CMDS.has(cmd) && channelId && channelId !== ALLOWED_GAMBLING_CHANNEL) {
+  return json({
+    type: 4,
+    data: {
+      content: `🎲 הימורים רק בחדר <#${ALLOWED_GAMBLING_CHANNEL}>`,
+    }
+  });
+}
+
+    
     // /work (+10, 1h)
     if (cmd === "work") {
       const now = Date.now();
@@ -196,3 +213,4 @@ export async function handler(event) {
 
   return json({ type: 5 });
 }
+
