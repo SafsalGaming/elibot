@@ -17,15 +17,13 @@ const headers = {
   "User-Agent": "DiscordBot (register,1.0)"
 };
 
+// English command names, Hebrew bot replies
 const commands = [
+  { name: "balance", description: "Show your coin balance", type: 1 },
+  { name: "daily",   description: "Claim daily bonus (+50, 24h cooldown)", type: 1 },
   {
-    name: "balance",
-    description: "Show your coin balance",
-    type: 1
-  },
-  {
-    name: "daily",
-    description: "Claim daily bonus",
+    name: "work",
+    description: "Work for coins (+10, 1h cooldown)",
     type: 1
   },
   {
@@ -36,7 +34,7 @@ const commands = [
       {
         name: "choice",
         description: "heads or tails",
-        type: 3, // STRING
+        type: 3,
         required: true,
         choices: [
           { name: "heads", value: "heads" },
@@ -46,7 +44,29 @@ const commands = [
       {
         name: "amount",
         description: "Amount to bet",
-        type: 4, // INTEGER
+        type: 4,
+        required: true,
+        min_value: 1
+      }
+    ]
+  },
+  {
+    name: "dice",
+    description: "Roll a die (guess 1-6)",
+    type: 1,
+    options: [
+      {
+        name: "guess",
+        description: "Your guess (1-6)",
+        type: 4,
+        required: true,
+        min_value: 1,
+        max_value: 6
+      },
+      {
+        name: "amount",
+        description: "Amount to bet",
+        type: 4,
         required: true,
         min_value: 1
       }
@@ -57,20 +77,14 @@ const commands = [
     description: "Give coins to another user",
     type: 1,
     options: [
-      {
-        name: "user",
-        description: "Target user",
-        type: 6, // USER
-        required: true
-      },
-      {
-        name: "amount",
-        description: "Amount to give",
-        type: 4, // INTEGER
-        required: true,
-        min_value: 1
-      }
+      { name: "user", description: "Target user", type: 6, required: true },
+      { name: "amount", description: "Amount to give", type: 4, required: true, min_value: 1 }
     ]
+  },
+  {
+    name: "top",
+    description: "Show top 10 richest users",
+    type: 1
   }
 ];
 
