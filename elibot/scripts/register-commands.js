@@ -56,14 +56,6 @@ const commands = [
     type: 1,
     options: [
       {
-        name: "guess",
-        description: "Your guess (1-6)",
-        type: 4,
-        required: true,
-        min_value: 1,
-        max_value: 6
-      },
-      {
         name: "amount",
         description: "Amount to bet",
         type: 4,
@@ -122,3 +114,4 @@ async function main() {
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
+
