@@ -3,7 +3,10 @@
   "scripts": {
     "register:guild": "node scripts/register-commands.js",
     "list:guild": "node scripts/register-commands.js --list",
-    "clear:guild": "node scripts/register-commands.js --clear"
+    "clear:guild": "node scripts/register-commands.js --clear",
+    "build": "npm run register:guild"   // <--- זה החלק החדש
   },
-  "dependencies": { "undici": "^6.19.8" }
+  "dependencies": {
+    "undici": "^6.19.8"
+  }
 }
