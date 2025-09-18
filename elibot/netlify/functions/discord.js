@@ -9,7 +9,7 @@ function json(obj, status = 200) {
 }
 
 export async function handler(event) {
-  const v = "v4";
+  const v = "v5";
   console.log("start", v, { method: event.httpMethod, b64: !!event.isBase64Encoded });
 
   if (event.httpMethod !== "POST") {
@@ -18,7 +18,6 @@ export async function handler(event) {
 
   const sig = event.headers["x-signature-ed25519"];
   const ts  = event.headers["x-signature-timestamp"];
-  console.log("hdrs", { hasSig: !!sig, hasTs: !!ts });
 
   const raw = event.isBase64Encoded
     ? Buffer.from(event.body || "", "base64")
@@ -26,22 +25,19 @@ export async function handler(event) {
 
   let ok = false;
   try {
-    ok = verifyKey(raw, sig, ts, process.env.DISCORD_PUBLIC_KEY);
+    // 👇👇👇 ה־await הוא הקריטי פה
+    ok = await verifyKey(raw, sig, ts, process.env.DISCORD_PUBLIC_KEY);
   } catch (e) {
     console.log("verifyKey error", String(e));
   }
   console.log("sig ok?", ok);
 
-  if (!ok) {
-    return { statusCode: 401, body: "Bad request signature" };
-  }
+  if (!ok) return { statusCode: 401, body: "Bad request signature" };
 
   const body = JSON.parse(raw.toString("utf8"));
   console.log("type", body?.type);
 
-  if (body?.type === 1) {
-    return json({ type: 1 });
-  }
+  if (body?.type === 1) return json({ type: 1 });
 
   if (body?.type === 2 && body.data?.name === "hello") {
     const user = body.member?.user?.username || body.user?.username || "חבר";
