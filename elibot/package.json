@@ -4,9 +4,10 @@
     "register:guild": "node scripts/register-commands.js",
     "list:guild": "node scripts/register-commands.js --list",
     "clear:guild": "node scripts/register-commands.js --clear",
-    "build": "npm run register:guild"   // <--- זה החלק החדש
+    "build": "npm run register:guild" 
   },
   "dependencies": {
     "undici": "^6.19.8"
   }
 }
+
