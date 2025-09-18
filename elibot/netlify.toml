@@ -1,7 +1,9 @@
 [build]
-  base = "."
+  base = "elibot"
   command = "npm run build"
   publish = "."
 
 [functions]
+  directory = "netlify/functions"
   node_bundler = "esbuild"
+  external_node_modules = ["discord-interactions","@supabase/supabase-js","undici"]
