@@ -1,16 +1,30 @@
 import { verifyKey } from "discord-interactions";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 const json = (obj, status = 200) => ({
   statusCode: status,
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(obj)
 });
+
+const HOUR = 60 * 60 * 1000;
+const DAY  = 24 * HOUR;
+
+async function getUser(userId) {
+  const { data } = await supabase.from("users").select("*").eq("id", userId).maybeSingle();
+  if (!data) {
+    const row = { id: userId, balance: 100, last_daily: null, last_work: null };
+    await supabase.from("users").insert(row);
+    return row;
+  }
+  return data;
+}
+
+async function setUser(userId, patch) {
+  await supabase.from("users").upsert({ id: userId, ...patch });
+}
 
 export async function handler(event) {
   if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
@@ -19,127 +33,165 @@ export async function handler(event) {
   const ts  = event.headers["x-signature-timestamp"];
   if (!sig || !ts) return { statusCode: 401, body: "Missing signature headers" };
 
-  const raw = event.isBase64Encoded
-    ? Buffer.from(event.body || "", "base64")
-    : Buffer.from(event.body || "", "utf8");
+  const raw = event.isBase64Encoded ? Buffer.from(event.body || "", "base64")
+                                    : Buffer.from(event.body || "", "utf8");
 
   let ok = false;
   try { ok = await verifyKey(raw, sig, ts, process.env.DISCORD_PUBLIC_KEY); } catch {}
   if (!ok) return { statusCode: 401, body: "Bad request signature" };
 
   const body = JSON.parse(raw.toString("utf8"));
-  if (body?.type === 1) return json({ type: 1 });
+  if (body?.type === 1) return json({ type: 1 }); // PING
 
   if (body?.type === 2) {
     const cmd = body.data.name;
-    const userId = body.member?.user?.id;
-    const username = body.member?.user?.username;
+    const opts = Object.fromEntries((body.data.options || []).map(o => [o.name, o.value]));
+    const userId = body.member?.user?.id || body.user?.id;
+    const username = body.member?.user?.username || body.user?.username || "חבר";
 
-    switch (cmd) {
-      case "balance": {
-        const { data } = await supabase
-          .from("users")
-          .select("balance")
-          .eq("id", userId)
-          .maybeSingle();
+    // /balance
+    if (cmd === "balance") {
+      const u = await getUser(userId);
+      return json({ type: 4, data: { content: `💰 ${username}, היתרה שלך: **${u.balance}** מטבעות` } });
+    }
 
-        let balance = data?.balance ?? 100;
-        if (!data) {
-          await supabase.from("users").insert({ id: userId, balance });
-        }
+    // /daily (+50, 24h)
+    if (cmd === "daily") {
+      const now = Date.now();
+      const u = await getUser(userId);
+      const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
 
-        return json({ type: 4, data: { content: `${username}, you have ${balance} coins 💰` } });
+      if (now - last < DAY) {
+        const left = DAY - (now - last);
+        const h = Math.floor(left / HOUR);
+        const m = Math.floor((left % HOUR) / (60 * 1000));
+        return json({ type: 4, data: { content: `⏳ כבר לקחת היום. נסה שוב בעוד ${h} שעות ו־${m} דקות.` } });
       }
 
-      case "daily": {
-        const { data } = await supabase
-          .from("users")
-          .select("balance, last_daily")
-          .eq("id", userId)
-          .maybeSingle();
+      const balance = (u.balance ?? 100) + 50;
+      await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
+      return json({ type: 4, data: { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${balance}**` } });
+    }
 
-        let balance = data?.balance ?? 100;
-        const now = new Date();
-        const lastDaily = data?.last_daily ? new Date(data.last_daily) : null;
+    // /work (+10, 1h)
+    if (cmd === "work") {
+      const now = Date.now();
+      const u = await getUser(userId);
+      const last = u.last_work ? new Date(u.last_work).getTime() : 0;
 
-        if (lastDaily && now - lastDaily < 24 * 60 * 60 * 1000) {
-          return json({ type: 4, data: { content: `${username}, you already claimed your daily bonus ⏳` } });
-        }
-
-        balance += 20;
-        if (data) {
-          await supabase.from("users").update({ balance, last_daily: now.toISOString() }).eq("id", userId);
-        } else {
-          await supabase.from("users").insert({ id: userId, balance, last_daily: now.toISOString() });
-        }
-
-        return json({ type: 4, data: { content: `${username}, you claimed 20 coins! 🎁 Balance: ${balance}` } });
+      if (now - last < HOUR) {
+        const left = HOUR - (now - last);
+        const m = Math.floor(left / (60 * 1000));
+        const s = Math.floor((left % (60 * 1000)) / 1000);
+        return json({ type: 4, data: { content: `⏳ עבדת לא מזמן. נסה שוב בעוד ${m} דק׳ ו־${s} שניות.` } });
       }
 
-      case "coinflip": {
-        const choice = body.data.options.find(o => o.name === "choice").value;
-        const amount = body.data.options.find(o => o.name === "amount").value;
+      const balance = (u.balance ?? 100) + 10;
+      await setUser(userId, { balance, last_work: new Date(now).toISOString() });
+      return json({ type: 4, data: { content: `👷 קיבלת **10** מטבעות על עבודה. יתרה: **${balance}**` } });
+    }
 
-        const { data } = await supabase
-          .from("users")
-          .select("balance")
-          .eq("id", userId)
-          .maybeSingle();
-
-        let balance = data?.balance ?? 100;
-        if (balance < amount) {
-          return json({ type: 4, data: { content: `${username}, you don't have enough coins 💸` } });
-        }
-
-        const result = Math.random() < 0.5 ? "heads" : "tails";
-        balance = result === choice ? balance + amount : balance - amount;
-
-        if (data) {
-          await supabase.from("users").update({ balance }).eq("id", userId);
-        } else {
-          await supabase.from("users").insert({ id: userId, balance });
-        }
-
-        return json({
-          type: 4,
-          data: { content: `${username} bet ${amount} on ${choice}. Coin landed on **${result}** → Balance: ${balance}` }
-        });
+    // /coinflip choice amount
+    if (cmd === "coinflip") {
+      const choice = String(opts.choice || "").toLowerCase();
+      const amount = parseInt(opts.amount, 10);
+      if (!["heads", "tails"].includes(choice)) {
+        return json({ type: 4, data: { content: `❌ בחירה לא תקינה. בחר heads או tails.` } });
+      }
+      if (!Number.isInteger(amount) || amount <= 0) {
+        return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
       }
 
-      case "give": {
-        const target = body.data.options.find(o => o.name === "user").value;
-        const amount = body.data.options.find(o => o.name === "amount").value;
+      const u = await getUser(userId);
+      if (amount > u.balance) {
+        return json({ type: 4, data: { content: `❌ אין לך מספיק מטבעות. היתרה שלך: ${u.balance}.` } });
+      }
 
-        const { data } = await supabase
-          .from("users")
-          .select("balance")
-          .eq("id", userId)
-          .maybeSingle();
-
-        let balance = data?.balance ?? 100;
-        if (balance < amount) {
-          return json({ type: 4, data: { content: `${username}, you don't have enough coins 💸` } });
-        }
-
+      const flip = Math.random() < 0.5 ? "heads" : "tails";
+      let balance = u.balance;
+      if (flip === choice) {
+        balance += amount;
+        await setUser(userId, { balance });
+        return json({ type: 4, data: { content: `🪙 יצא **${flip}** — זכית! +${amount}. יתרה: **${balance}**` } });
+      } else {
         balance -= amount;
-        await supabase.from("users").upsert({ id: userId, balance });
-
-        const { data: targetData } = await supabase
-          .from("users")
-          .select("balance")
-          .eq("id", target)
-          .maybeSingle();
-
-        let targetBalance = targetData?.balance ?? 100;
-        targetBalance += amount;
-        await supabase.from("users").upsert({ id: target, balance: targetBalance });
-
-        return json({
-          type: 4,
-          data: { content: `${username} gave <@${target}> ${amount} coins. Your balance: ${balance}, Their balance: ${targetBalance}` }
-        });
+        await setUser(userId, { balance });
+        return json({ type: 4, data: { content: `🪙 יצא **${flip}** — הפסדת... -${amount}. יתרה: **${balance}**` } });
       }
     }
+
+    // /dice guess amount (d6, payout x5 על פגיעה מדויקת)
+    if (cmd === "dice") {
+      const guess = parseInt(opts.guess, 10);
+      const amount = parseInt(opts.amount, 10);
+      if (!Number.isInteger(guess) || guess < 1 || guess > 6) {
+        return json({ type: 4, data: { content: `❌ ניחוש חייב להיות בין 1 ל־6.` } });
+      }
+      if (!Number.isInteger(amount) || amount <= 0) {
+        return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
+      }
+
+      const u = await getUser(userId);
+      if (amount > u.balance) {
+        return json({ type: 4, data: { content: `❌ אין לך מספיק מטבעות. היתרה שלך: ${u.balance}.` } });
+      }
+
+      const roll = 1 + Math.floor(Math.random() * 6);
+      let balance = u.balance;
+      if (roll === guess) {
+        const win = amount * 5; // house edge קל
+        balance += win;
+        await setUser(userId, { balance });
+        return json({ type: 4, data: { content: `🎲 יצא **${roll}** — בול! זכית **+${win}**. יתרה: **${balance}**` } });
+      } else {
+        balance -= amount;
+        await setUser(userId, { balance });
+        return json({ type: 4, data: { content: `🎲 יצא **${roll}** — פספוס. הפסדת **-${amount}**. יתרה: **${balance}**` } });
+      }
+    }
+
+    // /give user amount
+    if (cmd === "give") {
+      const target = opts.user; // user id
+      const amount = parseInt(opts.amount, 10);
+      if (!target || target === userId) {
+        return json({ type: 4, data: { content: `❌ משתמש לא תקין.` } });
+      }
+      if (!Number.isInteger(amount) || amount <= 0) {
+        return json({ type: 4, data: { content: `❌ סכום לא תקין.` } });
+      }
+
+      const u = await getUser(userId);
+      if (u.balance < amount) {
+        return json({ type: 4, data: { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance}.` } });
+      }
+
+      const receiver = await getUser(target);
+      const senderBal = u.balance - amount;
+      const recvBal = (receiver.balance ?? 100) + amount;
+      await setUser(userId, { balance: senderBal });
+      await setUser(target,  { balance: recvBal });
+
+      return json({ type: 4, data: { content: `🤝 העברת **${amount}** מטבעות ל־<@${target}>. היתרה שלך: **${senderBal}**, שלו: **${recvBal}**` } });
+    }
+
+    // /top
+    if (cmd === "top") {
+      const { data } = await supabase
+        .from("users")
+        .select("id, balance")
+        .order("balance", { ascending: false })
+        .limit(10);
+
+      if (!data || data.length === 0) {
+        return json({ type: 4, data: { content: `אין עדיין נתונים ללוח הובלות.` } });
+      }
+
+      const lines = data.map((u, i) => `**${i+1}.** <@${u.id}> — ${u.balance}`);
+      return json({ type: 4, data: { content: `🏆 טופ 10 עשירים:\n${lines.join("\n")}` } });
+    }
+
+    return json({ type: 4, data: { content: `הפקודה לא מוכרת.` } });
   }
 
   return json({ type: 5 });
