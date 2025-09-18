@@ -4,28 +4,6 @@ import { fetch } from "undici";
 const APP_ID   = process.env.DISCORD_APPLICATION_ID;
 const TOKEN    = process.env.DISCORD_TOKEN;
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
-const userId   = body.member?.user?.id || body.user?.id;
-const username = body.member?.user?.username || body.user?.username || "חבר";
-const disc     = body.member?.user?.discriminator || body.user?.discriminator || null;
-const displayName = disc ? `${username}#${disc}` : username;
-
-await ensureUsernameOnce(userId, displayName);
-
-async function ensureUsernameOnce(userId, displayName) {
-  if (!displayName) return;
-
-  // 1) אם אין משתמש — ניצור אותו עם השם (ונשמור balance התחלתי)
-  await supabase
-    .from("users")
-    .upsert({ id: userId, username: displayName, balance: 100 }, { onConflict: "id", ignoreDuplicates: true });
-
-  // 2) אם יש משתמש אבל username עדיין NULL — נמלא אותו פעם אחת
-  await supbase
-    .from("users")
-    .update({ username: displayName })
-    .eq("id", userId)
-    .is("username", null);
-}
 
 if (!APP_ID || !TOKEN || !GUILD_ID) {
   console.error("Missing APP_ID or TOKEN or GUILD_ID");
@@ -39,15 +17,11 @@ const headers = {
   "User-Agent": "DiscordBot (register,1.0)"
 };
 
-// English command names, Hebrew bot replies
+// ההגדרה של הפקודות
 const commands = [
   { name: "balance", description: "Show your coin balance", type: 1 },
-  { name: "daily",   description: "Claim daily bonus (+50, 24h cooldown)", type: 1 },
-  {
-    name: "work",
-    description: "Work for coins (+10, 1h cooldown)",
-    type: 1
-  },
+  { name: "daily", description: "Claim daily bonus", type: 1 },
+  { name: "work", description: "Work once per hour for 10 coins", type: 1 },
   {
     name: "coinflip",
     description: "Bet on a coin flip",
@@ -74,7 +48,7 @@ const commands = [
   },
   {
     name: "dice",
-    description: "Roll a die (guess 1-6)",
+    description: "Roll vs bot",
     type: 1,
     options: [
       {
@@ -92,14 +66,10 @@ const commands = [
     type: 1,
     options: [
       { name: "user", description: "Target user", type: 6, required: true },
-      { name: "amount", description: "Amount to give", type: 4, required: true, min_value: 1 }
+      { name: "amount", description: "Amount to give", type: 4, required: true }
     ]
   },
-  {
-    name: "top",
-    description: "Show top 10 richest users",
-    type: 1
-  }
+  { name: "top", description: "Show top 10 richest users", type: 1 }
 ];
 
 const mode = process.argv.includes("--list") ? "list"
@@ -136,5 +106,3 @@ async function main() {
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
-
-
