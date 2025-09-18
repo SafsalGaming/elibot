@@ -84,7 +84,7 @@ if (GAMBLING_CMDS.has(cmd) && channelId && channelId !== ALLOWED_GAMBLING_CHANNE
   return json({
     type: 4,
     data: {
-      content: `🎲 הימורים רק בחדר <#${ALLOWED_GAMBLING_CHANNEL}>`,
+      content: `🎲<#${ALLOWED_GAMBLING_CHANNEL}> הימורים רק בחדר`,
     }
   });
 }
@@ -213,4 +213,5 @@ if (GAMBLING_CMDS.has(cmd) && channelId && channelId !== ALLOWED_GAMBLING_CHANNE
 
   return json({ type: 5 });
 }
+
 
