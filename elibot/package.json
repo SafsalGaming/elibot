@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "undici": "^6.19.8",
-    "@supabase/supabase-js": "^2.43.4"
+    "@supabase/supabase-js": "^2.43.4",
+    "discord-interactions": "^3.4.0"
   }
 }
