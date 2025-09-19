@@ -2,6 +2,11 @@
 import { verifyKey } from "discord-interactions";
 import { createClient } from "@supabase/supabase-js";
 import { fetch } from "undici";
+const json = (obj, status = 200) => ({
+  statusCode: status,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(obj),
+});
 
 /* ========== CONFIG ========== */
 const SUPABASE = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
@@ -541,3 +546,4 @@ export async function handler(event) {
     body: JSON.stringify({ type: 5 })
   };
 }
+
