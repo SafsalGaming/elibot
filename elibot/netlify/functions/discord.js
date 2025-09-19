@@ -538,7 +538,7 @@ if (!lot.close_at) {
 }
 
 // 8) תשובה סופית למשתמש
-return json({ type: 4, data: { content: `🎟️ נכנסת/הוספת **${amount}** להגרלה #${lot.id}.` } });
+return json({ type: 4, data: { content: `🎟️ נכנסת/הוספת **${amount}** להגרלה #${lot.number}.` } });
 
     }
 
@@ -553,5 +553,6 @@ return json({ type: 4, data: { content: `🎟️ נכנסת/הוספת **${amoun
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
