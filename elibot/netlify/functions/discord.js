@@ -190,7 +190,7 @@ if (cid.startsWith("roulette:")) {
       // ההימור ירד בתחילת המשחק — אין החזר
       return json({
         type: 7,
-        data: { content: `🎰 **BUST!** הפסדת את ההימור (${bet}).`, components: [] }
+        data: { content: `🎰 **BUST!** הפסדת (${bet}).`, components: [] }
       });
     }
 
@@ -372,13 +372,13 @@ content: `🎰 רולטה — סכום נוכחי: **${payout}**`,
       if (userRoll > botRoll) {
         balance += amount;
         await SUPABASE.from("users").upsert({ id: userId, balance });
-        return json({ type: 4, data: { content: `🎲 אתה: **${userRoll}**, בוט: **${botRoll}** — ניצחת! +${amount}. יתרה: **${balance}**` } });
+        return json({ type: 4, data: { content: `🎲 אתה: **${userRoll}**, אלי: **${botRoll}** — ניצחת! +${amount}. יתרה: **${balance}**` } });
       } else if (userRoll < botRoll) {
         balance -= amount;
         await SUPABASE.from("users").upsert({ id: userId, balance });
-        return json({ type: 4, data: { content: `🎲 אתה: **${userRoll}**, בוט: **${botRoll}** — הפסדת... -${amount}. יתרה: **${balance}**` } });
+        return json({ type: 4, data: { content: `🎲 אתה: **${userRoll}**, אלי: **${botRoll}** — עוד ניצחון לאלי -${amount}. יתרה: **${balance}**` } });
       } else {
-        return json({ type: 4, data: { content: `🎲 תיקו! אתה: **${userRoll}**, בוט: **${botRoll}** — אין שינוי (יתרה: ${balance})` } });
+        return json({ type: 4, data: { content: `🎲 תיקו! אתה: **${userRoll}**, אלי: **${botRoll}** — אין שינוי (יתרה: ${balance})` } });
       }
     }
 
@@ -588,6 +588,7 @@ if (cmd === "lottery") {
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
