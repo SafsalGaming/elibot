@@ -81,9 +81,21 @@ async function editChannelMessage(channelId, messageId, payload) {
 }
 
 /* ========== ROULETTE HELPERS ========== */
-// המולטיפלייר עולה ב-0.1 כל סיבוב: 1.1, 1.2, 1.3 ...
+// הסתברות פיצוץ קבועה
 const ROULETTE_BUST_CHANCE = 0.20;
-const rouletteMultiplier = (round) => 1 + round / 10; // round 1 => 1.1
+
+// מכפיל אקספוננציאלי עד לסיבוב הנתון:
+// round=1 => 1.1
+// round=2 => 1.1 * 1.2 = 1.32
+// round=3 => 1.1 * 1.2 * 1.3 = 1.716
+const rouletteCompoundedMultiplier = (round) => {
+  let m = 1;
+  for (let k = 1; k <= round; k++) {
+    m *= (1 + k / 10);
+  }
+  return m;
+};
+
 
 /* ========== LOTTERY HELPERS / EMBEDS ========== */
 function nowIL() {
@@ -156,63 +168,69 @@ export async function handler(event) {
     const userId   = body.member?.user?.id || body.user?.id;
     const username = body.member?.user?.username || body.user?.username || "חבר";
 
-    // ROULETTE buttons
-    // custom_id: "roulette:ownerId:bet:round:action"
-    if (cid.startsWith("roulette:")) {
-      const [, ownerId, betStr, roundStr, action] = cid.split(":");
-      const bet   = parseInt(betStr, 10);
-      const round = parseInt(roundStr, 10);
-      if (userId !== ownerId) {
-        return json({ type: 7, data: { content: `❌ רק מי שהתחיל את הרולטה יכול ללחוץ.`, components: [] } });
-      }
+// ROULETTE buttons
+// custom_id: "roulette:ownerId:bet:round:action"
+if (cid.startsWith("roulette:")) {
+  const [, ownerId, betStr, roundStr, action] = cid.split(":");
+  const bet   = parseInt(betStr, 10);
+  const round = parseInt(roundStr, 10);
 
-      if (action === "hit") {
-        // בדיקת bust
-        const bust = Math.random() < ROULETTE_BUST_CHANCE;
-        if (bust) {
-          // הפסד — אין החזר, הכסף כבר ירד בתחילת המשחק
-          return json({
-            type: 7,
-            data: {
-              content: `🎰 **BUST!** הפסדת את ההימור (${bet}).`,
-              components: []
-            }
-          });
-        }
-        // הגדלת סיבוב
-        const nextRound = round + 1;
-        const mult = rouletteMultiplier(nextRound);
-        const potential = Math.floor(bet * mult);
-        return json({
-          type: 7,
-          data: {
-            content: `🎰 רולטה — הימור: **${bet}** | סיבוב: **${nextRound}** | מכפיל: **x${mult.toFixed(1)}** | מזומן נוכחי אם תצא: **${potential}**`,
-            components: [
-              row([
-                btn(`roulette:${ownerId}:${bet}:${nextRound}:hit`, "המשך (20% להפסיד)", 1),
-                btn(`roulette:${ownerId}:${bet}:${nextRound}:cash`, "צא עם הכסף", 3),
-              ])
-            ]
-          }
-        });
-      }
+  if (userId !== ownerId) {
+    return json({ type: 7, data: { content: `❌ רק מי שהתחיל את הרולטה יכול ללחוץ.`, components: [] } });
+  }
 
-      if (action === "cash") {
-        const mult = rouletteMultiplier(round);
-        const payout = Math.floor(bet * mult);
-        const u = await getUser(userId);
-        await setUser(userId, { balance: (u.balance ?? 100) + payout });
-        return json({
-          type: 7,
-          data: {
-            content: `💵 יצאת עם **${payout}** (מכפיל x${mult.toFixed(1)} על הימור ${bet}). יתרה: **${(u.balance ?? 100) + payout}**`,
-            components: []
-          }
-        });
-      }
-
-      return json({ type: 7, data: { content: "❓ פעולה לא מוכרת.", components: [] } });
+  if (action === "hit") {
+    // בדיקת פיצוץ
+    const bust = Math.random() < ROULETTE_BUST_CHANCE;
+    if (bust) {
+      // ההימור ירד בתחילת המשחק — אין החזר
+      return json({
+        type: 7,
+        data: { content: `🎰 **BUST!** הפסדת את ההימור (${bet}).`, components: [] }
+      });
     }
+
+    // עברנו לסיבוב הבא
+    const nextRound = round + 1;
+    const payout = Math.floor(bet * rouletteCompoundedMultiplier(nextRound));
+    const profit = payout - bet;
+
+    return json({
+      type: 7,
+      data: {
+        // מציגים רק את הרווח, ללא מכפיל וללא טקסט על הסיכוי
+        content: `🎰 רולטה — הימור: **${bet}** | רווח נוכחי: **+${profit}**`,
+        components: [
+          row([
+            btn(`roulette:${ownerId}:${bet}:${nextRound}:hit`, "המשך", 1),
+            btn(`roulette:${ownerId}:${bet}:${nextRound}:cash`, "צא", 3),
+          ])
+        ]
+      }
+    });
+  }
+
+  if (action === "cash") {
+    const payout = Math.floor(bet * rouletteCompoundedMultiplier(round));
+    const profit = payout - bet;
+
+    const u = await getUser(userId);
+    const newBal = (u.balance ?? 100) + payout;
+    await setUser(userId, { balance: newBal });
+
+    return json({
+      type: 7,
+      data: {
+        // מציגים רווח וסכום שחוזר, בלי מכפילים/סיכון
+        content: `💵 יצאת עם **${payout}** (רווח **+${profit}**). יתרה: **${newBal}**`,
+        components: []
+      }
+    });
+  }
+
+  return json({ type: 7, data: { content: "❓ פעולה לא מוכרת.", components: [] } });
+}
+
 
     // FIGHT join button
     // custom_id: "fight_join:creatorId:amount"
@@ -386,35 +404,39 @@ export async function handler(event) {
     }
 
     /* ----- roulette amount ----- */
-    if (cmd === "roulette") {
-      const amount = parseInt(opts.amount, 10);
-      if (!Number.isInteger(amount) || amount <= 0) return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
+if (cmd === "roulette") {
+  const amount = parseInt(opts.amount, 10);
+  if (!Number.isInteger(amount) || amount <= 0) {
+    return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
+  }
 
-      const u = await getUser(userId);
-      if ((u.balance ?? 100) < amount) return json({ type: 4, data: { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance}.` } });
+  const u = await getUser(userId);
+  if ((u.balance ?? 100) < amount) {
+    return json({ type: 4, data: { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance}.` } });
+  }
 
-      // מחייבים את ההימור בתחילת המשחק
-      await setUser(userId, { balance: (u.balance ?? 100) - amount });
+  // מחייבים את ההימור בתחילת המשחק
+  await setUser(userId, { balance: (u.balance ?? 100) - amount });
 
-      // Round 1 (x1.1)
-      const round = 1;
-      const mult = rouletteMultiplier(round);
-      const potential = Math.floor(amount * mult);
+  // מתחילים בסיבוב 0 — רווח 0. כל "המשך" מגדיל אקספוננציאלית.
+  const round = 0;
+  const payout = Math.floor(amount * rouletteCompoundedMultiplier(round)); // = amount
+  const profit = payout - amount; // 0
 
-      // הודעה עם כפתורים; אפשר גם להפוך ל־ephemeral אם תרצה flags: 64
-      return json({
-        type: 4,
-        data: {
-          content: `🎰 רולטה — הימור: **${amount}** | סיבוב: **${round}** | מכפיל: **x${mult.toFixed(1)}** | מזומן אם תצא: **${potential}**`,
-          components: [
-            row([
-              btn(`roulette:${userId}:${amount}:${round}:hit`,  "המשך (20% להפסיד)", 1),
-              btn(`roulette:${userId}:${amount}:${round}:cash`, "צא עם הכסף", 3),
-            ])
-          ]
-        }
-      });
+  return json({
+    type: 4,
+    data: {
+      // מציגים רק את הרווח (כעת 0), בלי מכפיל ובלי טקסט סיכוי
+      content: `🎰 רולטה — הימור: **${amount}** | רווח נוכחי: **+${profit}**`,
+      components: [
+        row([
+          btn(`roulette:${userId}:${amount}:${round}:hit`, "המשך", 1),
+          btn(`roulette:${userId}:${amount}:${round}:cash`, "צא", 3),
+        ])
+      ]
     }
+  });
+}
 
     /* ----- fight amount ----- */
     if (cmd === "fight") {
@@ -562,6 +584,7 @@ if (cmd === "lottery") {
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
