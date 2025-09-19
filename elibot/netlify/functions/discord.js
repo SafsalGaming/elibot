@@ -199,7 +199,7 @@ if (cid.startsWith("roulette:")) {
       type: 7,
       data: {
         // מציגים רק את הרווח, ללא מכפיל וללא טקסט על הסיכוי
-        content: `🎰 רולטה — הימור: **${bet}** | רווח נוכחי: **+${profit}**`,
+content: `🎰 רולטה — סכום נוכחי: **${payout}**`,
         components: [
           row([
             btn(`roulette:${ownerId}:${bet}:${nextRound}:hit`, "המשך", 1),
@@ -419,7 +419,7 @@ if (cmd === "roulette") {
   await setUser(userId, { balance: (u.balance ?? 100) - amount });
 
   // מתחילים בסיבוב 0 — רווח 0. כל "המשך" מגדיל אקספוננציאלית.
-  const round = 0;
+  const round = 1;
   const payout = Math.floor(amount * rouletteCompoundedMultiplier(round)); // = amount
   const profit = payout - amount; // 0
 
@@ -584,6 +584,7 @@ if (cmd === "lottery") {
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
