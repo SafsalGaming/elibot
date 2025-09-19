@@ -144,9 +144,14 @@ const rouletteCompoundedMultiplier = (round) => {
 /* ========== LOTTERY HELPERS / EMBEDS ========== */
 // תאריך/שעה בפורמט ישראלי עם פסיק בין תאריך לשעה: DD/MM/YY, HH:MM
 function fmtIL(dt) {
-  const d = new Date(dt);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(-2)}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return new Date(dt).toLocaleString("he-IL", {
+    timeZone: "Asia/Jerusalem",
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
 // אמבד פתוח של לוטו – מציג זמן סגירה קשיח ולא "24 שעות"
@@ -664,8 +669,9 @@ if (lot) {
     .single();
 
   // מחשבים close_at בדיוק 24 שעות מ-created_at
-  const createdAt = new Date(newLot.created_at).getTime();
-  const closeAt = new Date(createdAt + 24 * 60 * 60 * 1000).toISOString();
+const createdAt = new Date(newLot.created_at).getTime();
+const closeAt = new Date(createdAt + 24 * 60 * 60 * 1000).toISOString();
+
 
   await SUPABASE.from("lotteries")
     .update({ close_at: closeAt })
@@ -756,4 +762,5 @@ await editOrPostLotteryMessage(
     body: JSON.stringify({ type: 5 })
   };
 } // ← זה סוגר את export async function handler
+
 
