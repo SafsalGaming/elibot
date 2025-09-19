@@ -251,8 +251,8 @@ if (userId !== ownerId) {
 content: `🎰 רולטה — סכום נוכחי: **${payout}**`,
         components: [
           row([
-            btn(`roulette:${ownerId}:${bet}:${nextRound}:hit`, "המשך", 1),
-            btn(`roulette:${ownerId}:${bet}:${nextRound}:cash`, "צא", 3),
+            btn(`roulette:${ownerId}:${bet}:${nextRound}:hit`, "המשך", 3),
+            btn(`roulette:${ownerId}:${bet}:${nextRound}:cash`, "צא", 4),
           ])
         ]
       }
@@ -502,8 +502,8 @@ if (cmd === "roulette") {
       content: `🎰 רולטה — סכום נוכחי: **${payout}**`,
       components: [
         row([
-          btn(`roulette:${userId}:${amount}:${round}:hit`,  "המשך", 1),
-          btn(`roulette:${userId}:${amount}:${round}:cash`, "צא",    3),
+          btn(`roulette:${userId}:${amount}:${round}:hit`,  "המשך", 3),
+          btn(`roulette:${userId}:${amount}:${round}:cash`, "צא",    4),
         ])
       ]
     }
@@ -707,6 +707,7 @@ await editOrPostLotteryMessage(
     body: JSON.stringify({ type: 5 })
   };
 } // ← זה סוגר את export async function handler
+
 
 
 
