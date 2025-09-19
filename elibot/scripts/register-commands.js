@@ -20,7 +20,8 @@ const headers = {
 const commands = [
   { name: "balance", description: "Show your coin balance", type: 1 },
   { name: "daily", description: "Claim daily bonus (+50, 24h cooldown)", type: 1 },
-  { name: "work", description: "Work for +10 (1h cooldown)", type: 1 },
+  { name: "work",  description: "Work for +10 (1h cooldown)",            type: 1 },
+
   {
     name: "coinflip",
     description: "Bet on a coin flip (50/50)",
@@ -29,46 +30,68 @@ const commands = [
       {
         name: "choice",
         description: "heads or tails",
-        type: 3,
-        required: true,
-        choices: [
-          { name: "heads", value: "heads" },
-          { name: "tails", value: "tails" },
-        ],
+        type: 3, required: true,
+        choices: [{ name: "heads", value: "heads" }, { name: "tails", value: "tails" }]
       },
-      {
-        name: "amount",
-        description: "Amount to bet",
-        type: 4,
-        required: true,
-        min_value: 1,
-      },
-    ],
+      { name: "amount", description: "Amount to bet", type: 4, required: true, min_value: 1 }
+    ]
   },
+
   {
     name: "dice",
     description: "Roll vs bot (higher wins, 1:1)",
     type: 1,
     options: [
-      {
-        name: "amount",
-        description: "Amount to bet",
-        type: 4,
-        required: true,
-        min_value: 1,
-      },
-    ],
+      { name: "amount", description: "Amount to bet", type: 4, required: true, min_value: 1 }
+    ]
   },
+
   {
     name: "give",
     description: "Give coins to another user",
     type: 1,
     options: [
       { name: "user", description: "Target user", type: 6, required: true },
-      { name: "amount", description: "Amount to give", type: 4, required: true, min_value: 1 },
-    ],
+      { name: "amount", description: "Amount to give", type: 4, required: true, min_value: 1 }
+    ]
   },
-  { name: "top", description: "Show top 10 richest users", type: 1 },
+
+  // חדש: רולטה
+  {
+    name: "roulette",
+    description: "Progressive roulette (20% bust each round, 1.1x → 1.2x → 1.3x ...)",
+    type: 1,
+    options: [
+      { name: "amount", description: "Stake amount", type: 4, required: true, min_value: 1 }
+    ]
+  },
+
+  // חדש: פייט
+  {
+    name: "fight",
+    description: "Open a 1v1 fight (another user clicks Join; winner takes all)",
+    type: 1,
+    options: [
+      { name: "amount", description: "Stake amount (each player)", type: 4, required: true, min_value: 1 }
+    ]
+  },
+
+  // חדש: לוטו עם תתי־פקודות
+  {
+    name: "lottery",
+    description: "Lottery: join / draw / status",
+    type: 1,
+    options: [
+      {
+        type: 1, name: "join", description: "Join the current lottery with an amount",
+        options: [{ name: "amount", description: "Your contribution", type: 4, required: true, min_value: 1 }]
+      },
+      { type: 1, name: "draw",   description: "Draw a winner for the open lottery" },
+      { type: 1, name: "status", description: "Show/update current lottery embed" }
+    ]
+  },
+
+  { name: "top", description: "Show top 10 richest users", type: 1 }
 ];
 
 const mode = process.argv.includes("--list") ? "list"
