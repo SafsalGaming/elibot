@@ -26,29 +26,39 @@ const BOT_HEADERS = {
   "Content-Type": "application/json",
   "User-Agent": "DiscordBot (functions,1.0)"
 };
-const APP_ID = process.env.DISCORD_APP_ID; // ← הוסף משתנה סביבה
+const APP_ID = process.env.DISCORD_APP_ID; // ודא שזה קיים בסביבה!
+
 const NOAUTH_HEADERS = {
   "Content-Type": "application/json",
-  "User-Agent": BOT_HEADERS["User-Agent"]
+  "User-Agent": BOT_HEADERS["User-Agent"],
 };
 
 async function deferEphemeralInteraction(body) {
-  // יוצר תגובת defer אפמרלית (type 5 + flags 64)
+  // מציג "thinking..." אפמרלי
   await fetch(`${API}/interactions/${body.id}/${body.token}/callback`, {
     method: "POST",
     headers: NOAUTH_HEADERS,
-    body: JSON.stringify({ type: 5, data: { flags: 64 } })
+    body: JSON.stringify({ type: 5, data: { flags: 64 } }),
   });
 }
 
-async function editOriginalInteraction(body, payload) {
-  // עורך את ההודעה של האינטראקציה (אפמרלית במקרה שלנו)
-  await fetch(`${API}/webhooks/${APP_ID}/${body.token}/messages/@original`, {
-    method: "PATCH",
+async function deleteOriginalInteraction(body) {
+  const r = await fetch(`${API}/webhooks/${APP_ID}/${body.token}/messages/@original`, {
+    method: "DELETE",
     headers: NOAUTH_HEADERS,
-    body: JSON.stringify(payload)
   });
+  if (!r.ok) console.log("deleteOriginal failed:", r.status, await r.text());
 }
+
+async function sendFollowupEphemeral(body, payload) {
+  const r = await fetch(`${API}/webhooks/${APP_ID}/${body.token}`, {
+    method: "POST",
+    headers: NOAUTH_HEADERS,
+    body: JSON.stringify({ ...payload, flags: 64 }),
+  });
+  if (!r.ok) console.log("followup failed:", r.status, await r.text());
+}
+
 
 
 const HOUR = 60 * 60 * 1000;
@@ -525,24 +535,24 @@ if (cmd === "fight") {
 if (cmd === "lottery") {
   const amount = parseInt(opts.amount, 10);
   if (!Number.isInteger(amount) || amount <= 0) {
-    // החזר מיד (דרך callback) הודעת שגיאה אפמרלית קצרה
+    // שגיאה אפמרלית מיד (בלי defer)
     await fetch(`${API}/interactions/${body.id}/${body.token}/callback`, {
       method: "POST",
       headers: NOAUTH_HEADERS,
-      body: JSON.stringify({ type: 4, data: { flags: 64, content: "❌ סכום לא תקין." } })
+      body: JSON.stringify({ type: 4, data: { flags: 64, content: "❌ סכום לא תקין." } }),
     });
     return { statusCode: 200, body: "" };
   }
 
-  // 1) defer אפמרלי כדי לעצור את הטיימאאוט של דיסקורד
+  // 1) defer כדי לעצור את הטיימאאוט של דיסקורד
   await deferEphemeralInteraction(body);
 
   try {
-    // 2) (אופציונלי) סגירת הגרלה שפג תוקפה – ממליץ להעביר לפונקציה מתוזמנת.
+    // 2) סגירת הגרלה שפג תוקפה (אפשר להוציא ל-cron בהמשך)
     const { data: open } = await SUPABASE
       .from("lotteries")
       .select("id,status,close_at,message_id,number")
-      .eq("status","open")
+      .eq("status", "open")
       .maybeSingle();
 
     if (open && open.close_at && Date.now() > new Date(open.close_at).getTime()) {
@@ -553,8 +563,7 @@ if (cmd === "lottery") {
 
       const totalPast = (rows || []).reduce((s, r) => s + r.amount, 0);
       if (totalPast > 0 && rows?.length) {
-        let roll = Math.random() * totalPast;
-        let winner = rows[0].user_id;
+        let roll = Math.random() * totalPast, winner = rows[0].user_id;
         for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
         const w = await getUser(winner);
         await setUser(winner, { balance: (w.balance ?? 100) + totalPast });
@@ -566,7 +575,8 @@ if (cmd === "lottery") {
     // 3) בדיקת יתרה
     const u = await getUser(userId);
     if ((u.balance ?? 100) < amount) {
-      await editOriginalInteraction(body, { content: `❌ אין לך מספיק מטבעות (יתרה: ${u.balance}).` });
+      await deleteOriginalInteraction(body);
+      await sendFollowupEphemeral(body, { content: `❌ אין לך מספיק מטבעות (יתרה: ${u.balance}).` });
       return { statusCode: 200, body: "" };
     }
 
@@ -574,23 +584,32 @@ if (cmd === "lottery") {
     let { data: lot } = await SUPABASE
       .from("lotteries")
       .select("id,status,message_id,close_at,number")
-      .eq("status","open")
+      .eq("status", "open")
       .maybeSingle();
 
+    let createdNew = false;
     if (!lot) {
-      const closeAt = new Date(Date.now() + 24*60*60*1000).toISOString();
+      const closeAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       const { data: newLot } = await SUPABASE
         .from("lotteries")
         .insert({ status: "open", close_at: closeAt })
         .select()
         .single();
       lot = newLot;
+      createdNew = true;
     }
 
-    // 5) מחייבים את המשתמש
+    // 5) נבדוק אם זו הרשומה הראשונה לפני ההוספה
+    const { count: beforeCount } = await SUPABASE
+      .from("lottery_entries")
+      .select("id", { count: "exact", head: true })
+      .eq("lottery_id", lot.id);
+    const wasFirst = createdNew || (beforeCount || 0) === 0;
+
+    // 6) מחייבים את המשתמש
     await setUser(userId, { balance: (u.balance ?? 100) - amount });
 
-    // 6) מוסיפים/מעדכנים כניסה
+    // 7) מוסיפים/מעדכנים כניסה
     const { data: existing } = await SUPABASE
       .from("lottery_entries")
       .select("id,amount")
@@ -604,7 +623,7 @@ if (cmd === "lottery") {
       await SUPABASE.from("lottery_entries").insert({ lottery_id: lot.id, user_id: userId, amount });
     }
 
-    // 7) מחשבים סכומים ומעדכנים הודעת ההגרלה בערוץ הייעודי
+    // 8) מחשבים סכומים ומעדכנים הודעת הלוטו בערוץ הייעודי
     const { data: entries } = await SUPABASE
       .from("lottery_entries")
       .select("user_id,amount")
@@ -619,22 +638,32 @@ if (cmd === "lottery") {
       const pct = total ? Math.round((amt / total) * 100) : 100;
       lines.push(`<@${uid}> → ${pct}%`);
     }
-
     await editOrPostLotteryMessage(lot, lotteryOpenEmbed(lot.number, lot.close_at, total, lines));
 
-    // 8) מעדכנים את ההודעה האפמרלית המקורית (edit original)
-    await editOriginalInteraction(body, { content: `🎟️ נכנסת/הוספת **${amount}** להגרלה מספר #${lot.number}.` });
+    // 9) הודעה פומבית בערוץ הפקודה
+    if (wasFirst) {
+      await postChannelMessage(channelId, {
+        content: `<@${userId}> פתח את הגרלה מספר #${lot.number} עם סכום של **${amount}** מטבעות 💰`,
+      });
+    } else {
+      await postChannelMessage(channelId, {
+        content: `<@${userId}> הוסיף **${amount}** מטבעות להגרלה 💰`,
+      });
+    }
 
-    // אפשר גם (לא חובה) לכתוב אישור בערוץ:
-    // await postChannelMessage(channelId, { content: `🎟️ <@${userId}> נכנס/ה להגרלה #${lot.number} עם **${amount}**.` });
+    // 10) סוגרים את ה-"thinking..." ושולחים אפמרלי סופי
+    await deleteOriginalInteraction(body);
+    await sendFollowupEphemeral(body, { content: `🎟️ עודכנה ההשתתפות שלך בהגרלה #${lot.number} (+${amount}).` });
 
     return { statusCode: 200, body: "" };
   } catch (e) {
     console.log("lottery error:", e?.message || e);
-    await editOriginalInteraction(body, { content: "⚠️ תקלה זמנית בעיבוד ההגרלה. נסה/י שוב." });
+    await deleteOriginalInteraction(body);
+    await sendFollowupEphemeral(body, { content: "⚠️ תקלה זמנית בעיבוד ההגרלה. נסה/י שוב." });
     return { statusCode: 200, body: "" };
   }
 }
+
 
     // לא מוכר
     return json({ type: 4, data: { content: `הפקודה לא מוכרת.` } });
@@ -647,6 +676,7 @@ if (cmd === "lottery") {
     body: JSON.stringify({ type: 5 })
   };
 } // ← זה סוגר את export async function handler
+
 
 
 
