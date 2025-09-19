@@ -13,7 +13,13 @@ const SUPABASE = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 
 // ערוצי יעד
 const ALLOWED_GAMBLING_CHANNEL = "1418196736958005361"; // הימורים (roulette / fight / coinflip / dice / daily / work)
-const LOTTERY_CHANNEL_ID       = "1418491365259477084"; // כאן נשלחת/מתעדכנת הודעת הלוטו
+const LOTTERY_CHANNEL_ID       = "1418491365259477084";
+// ===== Updates button scope (חד-חד-ערכי להודעה הזאת) =====
+const GUIDE_CHANNEL_ID = "1418649681797451989";
+const GUIDE_MESSAGE_ID = "1418651039917408397";
+const UPDATES_ROLE_ID  = "1418491938704719883";
+
+// כאן נשלחת/מתעדכנת הודעת הלוטו
 
 // פקודות שנעולות לערוץ ההימורים (לוטו מותר בכל ערוץ)
 const GAMBLING_CMDS = new Set([
@@ -214,6 +220,49 @@ export async function handler(event) {
     const cid = body.data.custom_id || "";
     const userId   = body.member?.user?.id || body.user?.id;
     const username = body.member?.user?.username || body.user?.username || "חבר";
+  // ===== ROLE UPDATES (רק להודעה הספציפית הזאת) =====
+  // יעבוד גם אם ה-custom_id הוא "role_toggle:<id>" וגם אם הוא "lottery_updates_role"/"updates_role"
+  {
+    const msgId = body.message?.id;
+    const chId  = body.channel_id;
+
+    if (msgId === GUIDE_MESSAGE_ID && chId === GUIDE_CHANNEL_ID &&
+        (cid.startsWith("role_toggle:") || cid === "lottery_updates_role" || cid === "updates_role")) {
+
+      const guildId = body.guild_id;
+      const targetUserId = body.member?.user?.id || body.user?.id;
+
+      // קובע את ה-roleId: אם הגיע ב-custom_id ניקח ממנו, אחרת הקבוע מלמעלה
+      let roleId = UPDATES_ROLE_ID;
+      if (cid.startsWith("role_toggle:")) {
+        const part = cid.split(":")[1];
+        if (part) roleId = part;
+      }
+
+      if (!guildId || !targetUserId || !roleId) {
+        return json({ type: 4, data: { flags: 64, content: "⚠️ חסר נתון (Guild/User/Role)." } });
+      }
+
+      const hasRole = Array.isArray(body.member?.roles) && body.member.roles.includes(roleId);
+      const method  = hasRole ? "DELETE" : "PUT";
+      const okMsg   = hasRole ? "❌ הוסרת מרול ההגרלות" : "✅ נוספת לרול ההגרלות";
+
+      try {
+        const r = await fetch(`${API}/guilds/${guildId}/members/${targetUserId}/roles/${roleId}`, {
+          method, headers: BOT_HEADERS
+        });
+        if (!r.ok) {
+          const err = await r.text().catch(() => "");
+          console.log("role toggle http error:", r.status, err);
+          return json({ type: 4, data: { flags: 64, content: "⚠️ לא הצלחתי לעדכן רול. בדוק Manage Roles והיררכיית רולים." } });
+        }
+        return json({ type: 4, data: { flags: 64, content: okMsg } });
+      } catch (e) {
+        console.log("role toggle error:", e?.message || e);
+        return json({ type: 4, data: { flags: 64, content: "⚠️ שגיאה פנימית בעדכון רול." } });
+      }
+    }
+  }
 
 // ROULETTE buttons
 // custom_id: "roulette:ownerId:bet:round:action"
@@ -707,6 +756,7 @@ await editOrPostLotteryMessage(
     body: JSON.stringify({ type: 5 })
   };
 } // ← זה סוגר את export async function handler
+
 
 
 
