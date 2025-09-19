@@ -590,10 +590,20 @@ if (open && open.close_at && Date.now() > new Date(open.close_at).getTime()) {
 
     // 3) לוקחים/פותחים הגרלה פתוחה
     let { data: lot } = await SUPABASE
-      .from("lotteries")
-.select("id,status,message_id,close_at,created_at,number")
-      .eq("status","open")
-      .maybeSingle();
+  .from("lotteries")
+  .select("id,status,message_id,close_at,created_at,number")
+  .eq("status","open")
+  .maybeSingle();
+
+    // אם יש לוטו פתוח ישן, ודא ש-close_at = created_at + 24h
+if (lot) {
+  const targetClose = new Date(new Date(lot.created_at).getTime() + 24*60*60*1000).toISOString();
+  if (!lot.close_at || Math.abs(new Date(lot.close_at).getTime() - new Date(targetClose).getTime()) > 2000) {
+    await SUPABASE.from("lotteries").update({ close_at: targetClose }).eq("id", lot.id);
+    lot.close_at = targetClose;
+  }
+}
+
 
     let createdNew = false;
     if (!lot) {
@@ -697,6 +707,7 @@ await editOrPostLotteryMessage(
     body: JSON.stringify({ type: 5 })
   };
 } // ← זה סוגר את export async function handler
+
 
 
 
