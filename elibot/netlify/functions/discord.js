@@ -593,15 +593,25 @@ await editOrPostLotteryMessage(
 
     let createdNew = false;
     if (!lot) {
-      const closeAt = new Date(Date.now() + 24*60*60*1000).toISOString();
-      const { data: newLot } = await SUPABASE
-        .from("lotteries")
-        .insert({ status: "open", close_at: closeAt })
-        .select()
-        .single();
-      lot = newLot;
-      createdNew = true;
-    }
+  // יוצרים שורה ריקה כדי לקבל created_at מה-DB
+  const { data: newLot } = await SUPABASE
+    .from("lotteries")
+    .insert({ status: "open" })
+    .select()
+    .single();
+
+  // מחשבים close_at בדיוק 24 שעות מ-created_at
+  const createdAt = new Date(newLot.created_at).getTime();
+  const closeAt = new Date(createdAt + 24 * 60 * 60 * 1000).toISOString();
+
+  await SUPABASE.from("lotteries")
+    .update({ close_at: closeAt })
+    .eq("id", newLot.id);
+
+  lot = { ...newLot, close_at: closeAt }; // נשמור בזיכרון את הערך המעודכן
+  createdNew = true;
+}
+
 
     // 4) האם זה המשתתף/הראשון לפני ההוספה
     const { count: beforeCount } = await SUPABASE
@@ -683,6 +693,7 @@ await editOrPostLotteryMessage(
     body: JSON.stringify({ type: 5 })
   };
 } // ← זה סוגר את export async function handler
+
 
 
 
