@@ -99,8 +99,12 @@ const rouletteCompoundedMultiplier = (round) => {
 
 /* ========== LOTTERY HELPERS / EMBEDS ========== */
 function nowIL() {
-  return new Date().toLocaleString("he-IL", { hour12: false });
+  const d = new Date();
+  const date = d.toLocaleDateString("he-IL");
+  const time = d.toLocaleTimeString("he-IL", { hour12: false });
+  return `${date} | ${time}`;
 }
+
 function lotteryOpenEmbed(number, total, lines) {
   return {
     content: "",
@@ -117,7 +121,7 @@ function lotteryOpenEmbed(number, total, lines) {
         `🔔 **לקבלת עדכונים על הגרלות עתידיות**\n` +
         `||<@&1418491938704719883>||`,
       color: 0xFF9900,
-      footer: { text: "⏳ נסגרת אוטומטית אחרי 24 שעות" }
+      footer: { text: "⏳ ההגרלה נסגרת אחרי 24 שעות" }
     }]
   };
 }
@@ -584,6 +588,7 @@ if (cmd === "lottery") {
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
