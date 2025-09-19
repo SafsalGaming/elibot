@@ -435,112 +435,121 @@ export async function handler(event) {
     }
 
     /* ----- lottery amount ----- */
-    if (cmd === "lottery") {
-      const amount = parseInt(opts.amount, 10);
-      if (!Number.isInteger(amount) || amount <= 0) {
-        return json({ type: 4, data: { flags: 64, content: "❌ סכום לא תקין." } });
-      }
+/* ----- lottery amount ----- */
+if (cmd === "lottery") {
+  const amount = parseInt(opts.amount, 10);
+  if (!Number.isInteger(amount) || amount <= 0) {
+    return json({ type: 4, data: { flags: 64, content: "❌ סכום לא תקין." } });
+  }
 
-// 1) אם יש הגרלה פתוחה שפג זמנה – נסגור ונכריז זוכה
-const { data: open } = await SUPABASE
-  .from("lotteries")
-  .select("id, status, close_at, message_id")
-  .eq("status", "open")
-  .maybeSingle();
+  // 1) אם יש הגרלה פתוחה שפג זמנה – נסגור ונכריז זוכה (הכול בתוך אותה תגובה מהירה)
+  const { data: open } = await SUPABASE
+    .from("lotteries")
+    .select("id, status, close_at, message_id, number")
+    .eq("status", "open")
+    .maybeSingle();
 
-if (open && open.close_at && Date.now() > new Date(open.close_at).getTime()) {
-  const { data: rows } = await SUPABASE
+  if (open && open.close_at && Date.now() > new Date(open.close_at).getTime()) {
+    const { data: rows } = await SUPABASE
+      .from("lottery_entries")
+      .select("user_id, amount")
+      .eq("lottery_id", open.id);
+
+    const totalPast = (rows || []).reduce((s, r) => s + r.amount, 0);
+
+    if (totalPast > 0 && rows?.length) {
+      // בחירת זוכה פרופורציונית לסכום
+      let roll = Math.random() * totalPast;
+      let winner = rows[0].user_id;
+      for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
+
+      const w = await getUser(winner);
+      await setUser(winner, { balance: (w.balance ?? 100) + totalPast });
+
+      // פרסום הזוכה (מציגים מספר הגרלה למשתמש)
+      await editOrPostLotteryMessage(open, lotteryWinnerEmbed(open.number, winner, totalPast));
+    }
+
+    // סוגרים את ההגרלה שפג תוקפה
+    await SUPABASE.from("lotteries").update({ status: "closed" }).eq("id", open.id);
+  }
+
+  // 2) בדיקת יתרה
+  const u = await getUser(userId);
+  if ((u.balance ?? 100) < amount) {
+    return json({ type: 4, data: { flags: 64, content: `❌ אין לך מספיק מטבעות (יתרה: ${u.balance}).` } });
+  }
+
+  // 3) לוקחים/פותחים הגרלה פתוחה
+  let { data: lot } = await SUPABASE
+    .from("lotteries")
+    .select("id, status, message_id, close_at, number")
+    .eq("status", "open")
+    .maybeSingle();
+
+  if (!lot) {
+    const { data: newLot } = await SUPABASE
+      .from("lotteries")
+      .insert({
+        status: "open",
+        close_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      })
+      .select()
+      .single();
+    lot = newLot;
+  }
+
+  // 4) מחייבים את המשתמש
+  await setUser(userId, { balance: (u.balance ?? 100) - amount });
+
+  // 5) מוסיפים/מעדכנים כניסה מצטברת
+  const { data: existing } = await SUPABASE
+    .from("lottery_entries")
+    .select("id, amount")
+    .eq("lottery_id", lot.id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existing) {
+    await SUPABASE.from("lottery_entries")
+      .update({ amount: existing.amount + amount })
+      .eq("id", existing.id);
+  } else {
+    await SUPABASE.from("lottery_entries")
+      .insert({ lottery_id: lot.id, user_id: userId, amount });
+  }
+
+  // 6) מחשבים סכומים ומעדכנים את הודעת ההגרלה בערוץ הייעודי
+  const { data: entries } = await SUPABASE
     .from("lottery_entries")
     .select("user_id, amount")
-    .eq("lottery_id", open.id);
+    .eq("lottery_id", lot.id);
 
-  const totalPast = (rows || []).reduce((s, r) => s + r.amount, 0);
-  if (totalPast > 0 && rows?.length) {
-    let roll = Math.random() * totalPast;
-    let winner = rows[0].user_id;
-    for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
-    const w = await getUser(winner);
-    await setUser(winner, { balance: (w.balance ?? 100) + totalPast });
-    await editOrPostLotteryMessage(open, lotteryWinnerEmbed(open.id, winner, totalPast));
+  const total = (entries || []).reduce((s, e) => s + e.amount, 0);
+
+  // מאחדים לפי משתמש (גם אם בעתיד יהיו ריבוי רשומות)
+  const sums = new Map();
+  for (const e of entries || []) sums.set(e.user_id, (sums.get(e.user_id) || 0) + e.amount);
+
+  const lines = [];
+  for (const [uid, amt] of sums) {
+    const pct = total ? Math.round((amt / total) * 100) : 100;
+    lines.push(`<@${uid}> → ${pct}%`);
   }
-  await SUPABASE.from("lotteries").update({ status: "closed" }).eq("id", open.id);
+
+  await editOrPostLotteryMessage(lot, lotteryOpenEmbed(lot.number, total, lines));
+
+  // 7) לוודא שיש close_at (אם פתחו עכשיו)
+  if (!lot.close_at) {
+    await SUPABASE.from("lotteries")
+      .update({ close_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() })
+      .eq("id", lot.id);
+  }
+
+  // 8) תשובה סופית למשתמש — עם מספר הגרלה (לא ID)
+  return json({ type: 4, data: { content: `🎟️ נכנסת/הוספת **${amount}** להגרלה מספר #${lot.number}.` } });
 }
 
-// 2) בדיקת יתרה
-const u = await getUser(userId);
-if ((u.balance ?? 100) < amount) {
-  return json({ type: 4, data: { flags: 64, content: `❌ אין לך מספיק מטבעות (יתרה: ${u.balance}).` } });
-}
-
-// 3) לוקחים/פותחים הגרלה פתוחה
-let { data: lot } = await SUPABASE
-  .from("lotteries")
-  .select("id, status, message_id, close_at")
-  .eq("status", "open")
-  .maybeSingle();
-
-if (!lot) {
-  const { data: newLot } = await SUPABASE
-    .from("lotteries")
-    .insert({
-      status: "open",
-      total: 0,
-      close_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-    })
-    .select()
-    .single();
-  lot = newLot;
-}
-
-// 4) מחייבים את המשתמש
-await setUser(userId, { balance: (u.balance ?? 100) - amount });
-
-// 5) מוסיפים/מעַדְכנים כניסה מצטברת
-const { data: existing } = await SUPABASE
-  .from("lottery_entries")
-  .select("id, amount")
-  .eq("lottery_id", lot.id)
-  .eq("user_id", userId)
-  .maybeSingle();
-
-if (existing) {
-  await SUPABASE.from("lottery_entries")
-    .update({ amount: existing.amount + amount })
-    .eq("id", existing.id);
-} else {
-  await SUPABASE.from("lottery_entries")
-    .insert({ lottery_id: lot.id, user_id: userId, amount });
-}
-
-// 6) מחשבים סכומים ומעדכנים את הודעת ההגרלה
-const { data: entries } = await SUPABASE
-  .from("lottery_entries")
-  .select("user_id, amount")
-  .eq("lottery_id", lot.id);
-
-const total = (entries || []).reduce((s, e) => s + e.amount, 0);
-const sums = new Map();
-for (const e of entries || []) sums.set(e.user_id, (sums.get(e.user_id) || 0) + e.amount);
-
-const lines = [];
-for (const [uid, amt] of sums) {
-  const pct = total ? Math.round((amt / total) * 100) : 100;
-  lines.push(`<@${uid}> → ${pct}%`);
-}
-
-await editOrPostLotteryMessage(lot, lotteryOpenEmbed(lot.id, total, lines));
-
-// 7) לוודא שיש close_at (אם פתחו עכשיו)
-if (!lot.close_at) {
-  await SUPABASE.from("lotteries")
-    .update({ close_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() })
-    .eq("id", lot.id);
-}
-
-// 8) תשובה סופית למשתמש
-return json({ type: 4, data: { content: `🎟️ נכנסת/הוספת **${amount}** להגרלה #${lot.number}.` } });
-
-    }
 
     // לא מוכר
     return json({ type: 4, data: { content: `הפקודה לא מוכרת.` } });
@@ -553,6 +562,7 @@ return json({ type: 4, data: { content: `🎟️ נכנסת/הוספת **${amoun
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
