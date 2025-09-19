@@ -144,13 +144,14 @@ function fmtIL(dt) {
 }
 
 // אמבד פתוח של לוטו – מציג זמן סגירה קשיח ולא "24 שעות"
-function lotteryOpenEmbed(number, closeAtISO, total, lines) {
+// אמבד פתוח של לוטו – שורה 2 = זמן פתיחה בלבד
+function lotteryOpenEmbed(number, startAtISO, closeAtISO, total, lines) {
   return {
     content: "",
     embeds: [{
       title: `🎉  **הגרלה מספר #${number}**  🎉`,
       description:
-        `⏳ **נסגרת ב־** ${fmtIL(closeAtISO)}\n` +
+        `${fmtIL(startAtISO)}\n` +                    // ← רק תאריך/שעה של פתיחה
         `─────────────────────────────\n` +
         `💰 **סכום זכייה:** ${total} מטבעות\n` +
         `─────────────────────────────\n` +
@@ -160,7 +161,7 @@ function lotteryOpenEmbed(number, closeAtISO, total, lines) {
         `🔔 **לקבלת עדכונים על הגרלות עתידיות**\n` +
         `||<@&1418491938704719883>||`,
       color: 0xFF9900,
-      footer: { text: `⌚︎ מסתיים ב־ ${fmtIL(closeAtISO)}` }
+      footer: { text: `⏳ מסתיים ב־ ${fmtIL(closeAtISO)}` } // ממשיך להציג זמן סיום בפוטר
     }]
   };
 }
@@ -568,7 +569,10 @@ if (cmd === "lottery") {
         for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
         const w = await getUser(winner);
         await setUser(winner, { balance: (w.balance ?? 100) + totalPast });
-        await editOrPostLotteryMessage(open, lotteryWinnerEmbed(open.number, winner, totalPast));
+await editOrPostLotteryMessage(
+  lot,
+  lotteryOpenEmbed(lot.number, lot.created_at, lot.close_at, total, lines)
+);
       }
       await SUPABASE.from("lotteries").update({ status: "closed" }).eq("id", open.id);
     }
@@ -583,7 +587,7 @@ if (cmd === "lottery") {
     // 3) לוקחים/פותחים הגרלה פתוחה
     let { data: lot } = await SUPABASE
       .from("lotteries")
-      .select("id,status,message_id,close_at,number")
+.select("id,status,message_id,close_at,created_at,number")
       .eq("status","open")
       .maybeSingle();
 
@@ -641,7 +645,10 @@ if (cmd === "lottery") {
       const pct = total ? Math.round((amt / total) * 100) : 100;
       lines.push(`<@${uid}> → ${pct}%`);
     }
-    await editOrPostLotteryMessage(lot, lotteryOpenEmbed(lot.number, lot.close_at, total, lines));
+await editOrPostLotteryMessage(
+  lot,
+  lotteryOpenEmbed(lot.number, lot.created_at, lot.close_at, total, lines)
+);
 
     // 8) הודעה פומבית בערוץ הפקודה (בלי אפמרלי בכלל)
     if (wasFirst) {
@@ -676,6 +683,7 @@ if (cmd === "lottery") {
     body: JSON.stringify({ type: 5 })
   };
 } // ← זה סוגר את export async function handler
+
 
 
 
