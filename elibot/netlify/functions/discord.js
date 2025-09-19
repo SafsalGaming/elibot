@@ -242,27 +242,60 @@ content: `🎰 רולטה — סכום נוכחי: **${payout}**`,
 }
 
 
-    // FIGHT join button
-    // custom_id: "fight_join:creatorId:amount"
-    if (cid.startsWith("fight_join:")) {
-      const [, creatorId, amountStr] = cid.split(":");
-      const amount = parseInt(amountStr, 10);
-      if (userId === creatorId) {
-return json({ type: 4, data: { flags: 64, content: `❌ לא ניתן להצטרף לקרב של עצמך.` } });
-      }
+// FIGHT join button
+// custom_id: "fight_join:creatorId:amount"
+if (cid.startsWith("fight_join:")) {
+  const [, creatorId, amountStr] = cid.split(":");
+  const amount = parseInt(amountStr, 10);
 
-      // custom_id: "fight_cancel:creatorId:amount"
+  // היוצר לא יכול להצטרף לעצמו — אפמרלי
+  if (userId === creatorId) {
+    return json({ type: 4, data: { flags: 64, content: `❌ לא ניתן להצטרף לקרב של עצמך.` } });
+  }
+
+  // בדיקות כספים — אפמרלי בלבד (לא נוגעים בהודעת הקרב)
+  const a = await getUser(creatorId);
+  const b = await getUser(userId);
+  if ((a.balance ?? 100) < amount) {
+    return json({ type: 4, data: { flags: 64, content: `❌ <@${creatorId}> אין מספיק מטבעות כדי לקיים את הקרב כרגע.` } });
+  }
+  if ((b.balance ?? 100) < amount) {
+    return json({ type: 4, data: { flags: 64, content: `❌ אין לך מספיק מטבעות להצטרפות (נדרש ${amount}).` } });
+  }
+
+  // מחייבים את שני הצדדים
+  await setUser(creatorId, { balance: (a.balance ?? 100) - amount });
+  await setUser(userId,     { balance: (b.balance ?? 100) - amount });
+
+  // מגרילים זוכה ומזכים בפרס
+  const winner = Math.random() < 0.5 ? creatorId : userId;
+  const w = await getUser(winner);
+  const prize = amount * 2;
+  await setUser(winner, { balance: (w.balance ?? 100) + prize });
+
+  // כאן כן עורכים את הודעת הקרב (type:7) כדי להציג תוצאה ולסגור כפתורים
+  return json({
+    type: 7,
+    data: {
+      content:
+        `🥊 קרב על **${amount}**! המשתתפים: <@${creatorId}> מול <@${userId}>.\n` +
+        `🏆 הזוכה: <@${winner}> וקיבל **${prize}** מטבעות.`,
+      components: []
+    }
+  });
+}
+
 // custom_id: "fight_cancel:creatorId:amount"
 if (cid.startsWith("fight_cancel:")) {
   const [, creatorId, amountStr] = cid.split(":");
   const amount = parseInt(amountStr, 10);
 
-  // רק היוצר רשאי לבטל
+  // רק היוצר רשאי לבטל — אפמרלי למי שלא
   if (userId !== creatorId) {
     return json({ type: 4, data: { flags: 64, content: `❌ רק יוצר הקרב יכול לבטל אותו.` } });
   }
 
-  // עדכון הודעה: ביטול, הסרת כפתורים
+  // עדכון הודעה: ביטול, הסרת כפתורים (כאן כן עורכים את ההודעה)
   return json({
     type: 7,
     data: {
@@ -271,40 +304,6 @@ if (cid.startsWith("fight_cancel:")) {
     }
   });
 }
-
-
-      // בדיקת כספים לשני הצדדים
-      const a = await getUser(creatorId);
-      const b = await getUser(userId);
-if ((a.balance ?? 100) < amount) {
-  // היוצר לא יכול לממן — מודיעים רק ללוחץ (אפמרלי), לא נוגעים בהודעה המקורית
-  return json({ type: 4, data: { flags: 64, content: `❌ <@${creatorId}> אין מספיק מטבעות כדי לקיים את הקרב כרגע.` } });
-}
-if ((b.balance ?? 100) < amount) {
-  // ללוחץ אין מספיק — אפמרלי בלבד
-  return json({ type: 4, data: { flags: 64, content: `❌ אין לך מספיק מטבעות להצטרפות (נדרש ${amount}).` } });
-}
-
-      // מחייבים שני הצדדים
-      await setUser(creatorId, { balance: (a.balance ?? 100) - amount });
-      await setUser(userId,     { balance: (b.balance ?? 100) - amount });
-
-      // קובעים מנצח אקראי ומזכים ב-2*amount
-      const winner = Math.random() < 0.5 ? creatorId : userId;
-      const w = await getUser(winner);
-      const prize = amount * 2;
-      await setUser(winner, { balance: (w.balance ?? 100) + prize });
-
-      return json({
-        type: 7,
-        data: {
-          content:
-            `🥊 קרב על **${amount}**! המשתתפים: <@${creatorId}> מול <@${userId}>.\n` +
-            `🏆 הזוכה: <@${winner}> וקיבל **${prize}** מטבעות.`,
-          components: []
-        }
-      });
-    }
 
     // לא זוהתה פעולה
     return json({ type: 7, data: { content: "❓ פעולה לא מוכרת.", components: [] } });
@@ -633,6 +632,7 @@ if (cmd === "lottery") {
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
