@@ -276,12 +276,14 @@ if (cid.startsWith("fight_cancel:")) {
       // בדיקת כספים לשני הצדדים
       const a = await getUser(creatorId);
       const b = await getUser(userId);
-      if ((a.balance ?? 100) < amount) {
-        return json({ type: 7, data: { content: `❌ <@${creatorId}> אין מספיק מטבעות. הקרב בוטל.`, components: [] } });
-      }
-      if ((b.balance ?? 100) < amount) {
-        return json({ type: 7, data: { content: `❌ אין לך מספיק מטבעות להצטרפות.`, components: [] } });
-      }
+if ((a.balance ?? 100) < amount) {
+  // היוצר לא יכול לממן — מודיעים רק ללוחץ (אפמרלי), לא נוגעים בהודעה המקורית
+  return json({ type: 4, data: { flags: 64, content: `❌ <@${creatorId}> אין מספיק מטבעות כדי לקיים את הקרב כרגע.` } });
+}
+if ((b.balance ?? 100) < amount) {
+  // ללוחץ אין מספיק — אפמרלי בלבד
+  return json({ type: 4, data: { flags: 64, content: `❌ אין לך מספיק מטבעות להצטרפות (נדרש ${amount}).` } });
+}
 
       // מחייבים שני הצדדים
       await setUser(creatorId, { balance: (a.balance ?? 100) - amount });
@@ -631,6 +633,7 @@ if (cmd === "lottery") {
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
