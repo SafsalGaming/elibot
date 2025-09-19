@@ -602,6 +602,19 @@ if (cmd === "lottery") {
     return json({ type: 4, data: { flags: 64, content: "⚠️ תקלה זמנית בעיבוד ההגרלה. נסה/י שוב." } });
   }
 }
+    // לא מוכר
+    return json({ type: 4, data: { content: `הפקודה לא מוכרת.` } });
+  } // ← זה סוגר את if (body?.type === 2)
+
+  // אחרת (לא כפתור/לא פקודה/כל מקרה לא מזוהה) – החזר ACK ריק
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: 5 })
+  };
+} // ← זה סוגר את export async function handler
+
+
 
 
 
