@@ -1,9 +1,13 @@
 [build]
   base = "elibot"
-  command = "npm run build"
   publish = "."
+  command = ""
 
 [functions]
-  directory = "netlify/functions"
   node_bundler = "esbuild"
-  external_node_modules = ["discord-interactions","@supabase/supabase-js","undici"]
+  external_node_modules = ["discord-interactions", "@supabase/supabase-js", "undici"]
+
+# להריץ את בדיקת הלוטו כל 5 דקות (אפשר לשנות ל-1 דקה אם תרצה)
+[[scheduled.functions]]
+  path = "cron-lottery"
+  schedule = "*/5 * * * *"
