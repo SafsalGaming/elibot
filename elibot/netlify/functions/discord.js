@@ -98,20 +98,21 @@ const rouletteCompoundedMultiplier = (round) => {
 
 
 /* ========== LOTTERY HELPERS / EMBEDS ========== */
-function nowIL() {
-  const d = new Date();
-  const date = d.toLocaleDateString("he-IL");
-  const time = d.toLocaleTimeString("he-IL", { hour12: false });
-  return `${date} | ${time}`;
+// תאריך/שעה בפורמט ישראלי עם פסיק בין תאריך לשעה: DD/MM/YY, HH:MM
+function fmtIL(dt) {
+  const d = new Date(dt);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(-2)}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function lotteryOpenEmbed(number, total, lines) {
+// אמבד פתוח של לוטו – מציג זמן סגירה קשיח ולא "24 שעות"
+function lotteryOpenEmbed(number, closeAtISO, total, lines) {
   return {
     content: "",
     embeds: [{
       title: `🎉  **הגרלה מספר #${number}**  🎉`,
       description:
-        `${nowIL()}\n` +
+        `⏳ **נסגרת ב־** ${fmtIL(closeAtISO)}\n` +
         `─────────────────────────────\n` +
         `💰 **סכום זכייה:** ${total} מטבעות\n` +
         `─────────────────────────────\n` +
@@ -121,10 +122,11 @@ function lotteryOpenEmbed(number, total, lines) {
         `🔔 **לקבלת עדכונים על הגרלות עתידיות**\n` +
         `||<@&1418491938704719883>||`,
       color: 0xFF9900,
-      footer: { text: "⏳ ההגרלה נסגרת אחרי 24 שעות" }
+      footer: { text: `⌚︎ מסתיים ב־ ${fmtIL(closeAtISO)}` }
     }]
   };
 }
+
 function lotteryWinnerEmbed(number, winnerId, total) {
   return {
     content: "",
@@ -137,6 +139,7 @@ function lotteryWinnerEmbed(number, winnerId, total) {
     }]
   };
 }
+
 async function editOrPostLotteryMessage(lot, payload) {
   if (lot.message_id) {
     await editChannelMessage(LOTTERY_CHANNEL_ID, lot.message_id, payload);
@@ -145,6 +148,7 @@ async function editOrPostLotteryMessage(lot, payload) {
     await SUPABASE.from("lotteries").update({ message_id: msg.id }).eq("id", lot.id);
   }
 }
+
 
 /* ========== HANDLER ========== */
 export async function handler(event) {
@@ -179,9 +183,11 @@ if (cid.startsWith("roulette:")) {
   const bet   = parseInt(betStr, 10);
   const round = parseInt(roundStr, 10);
 
-  if (userId !== ownerId) {
-    return json({ type: 7, data: { content: `❌ רק מי שהתחיל את הרולטה יכול ללחוץ.`, components: [] } });
-  }
+if (userId !== ownerId) {
+  // תשובה אפמרלית שלא משנה את ההודעה המקורית
+  return json({ type: 4, data: { flags: 64, content: `❌ רק מי שהתחיל את הרולטה יכול ללחוץ.` } });
+}
+
 
   if (action === "hit") {
     // בדיקת פיצוץ
@@ -242,8 +248,30 @@ content: `🎰 רולטה — סכום נוכחי: **${payout}**`,
       const [, creatorId, amountStr] = cid.split(":");
       const amount = parseInt(amountStr, 10);
       if (userId === creatorId) {
-        return json({ type: 7, data: { content: `❌ צריך משתתף אחר שיצטרף.`, components: [] } });
+return json({ type: 4, data: { flags: 64, content: `❌ לא ניתן להצטרף לקרב של עצמך.` } });
       }
+
+      // custom_id: "fight_cancel:creatorId:amount"
+// custom_id: "fight_cancel:creatorId:amount"
+if (cid.startsWith("fight_cancel:")) {
+  const [, creatorId, amountStr] = cid.split(":");
+  const amount = parseInt(amountStr, 10);
+
+  // רק היוצר רשאי לבטל
+  if (userId !== creatorId) {
+    return json({ type: 4, data: { flags: 64, content: `❌ רק יוצר הקרב יכול לבטל אותו.` } });
+  }
+
+  // עדכון הודעה: ביטול, הסרת כפתורים
+  return json({
+    type: 7,
+    data: {
+      content: `🥊 הקרב על **${amount}** בוטל על ידי <@${creatorId}>.`,
+      components: []
+    }
+  });
+}
+
 
       // בדיקת כספים לשני הצדדים
       const a = await getUser(creatorId);
@@ -408,6 +436,7 @@ content: `🎰 רולטה — סכום נוכחי: **${payout}**`,
     }
 
     /* ----- roulette amount ----- */
+/* ----- roulette amount ----- */
 if (cmd === "roulette") {
   const amount = parseInt(opts.amount, 10);
   if (!Number.isInteger(amount) || amount <= 0) {
@@ -422,20 +451,19 @@ if (cmd === "roulette") {
   // מחייבים את ההימור בתחילת המשחק
   await setUser(userId, { balance: (u.balance ?? 100) - amount });
 
-  // מתחילים בסיבוב 0 — רווח 0. כל "המשך" מגדיל אקספוננציאלית.
+  // מתחילים בסיבוב 1 — כבר יש ×1.1
   const round = 1;
-  const payout = Math.floor(amount * rouletteCompoundedMultiplier(round)); // = amount
-  const profit = payout - amount; // 0
+  const payout = Math.floor(amount * rouletteCompoundedMultiplier(round)); // amount * 1.1
 
   return json({
     type: 4,
     data: {
-      // מציגים רק את הרווח (כעת 0), בלי מכפיל ובלי טקסט סיכוי
-      content: `🎰 רולטה — הימור: **${amount}** | רווח נוכחי: **+${profit}**`,
+      // מציגים רק את הסכום הכולל (כולל ההימור), בלי מכפילים/סיכוי
+      content: `🎰 רולטה — סכום נוכחי: **${payout}**`,
       components: [
         row([
-          btn(`roulette:${userId}:${amount}:${round}:hit`, "המשך", 1),
-          btn(`roulette:${userId}:${amount}:${round}:cash`, "צא", 3),
+          btn(`roulette:${userId}:${amount}:${round}:hit`,  "המשך", 1),
+          btn(`roulette:${userId}:${amount}:${round}:cash`, "צא",    3),
         ])
       ]
     }
@@ -443,137 +471,152 @@ if (cmd === "roulette") {
 }
 
     /* ----- fight amount ----- */
-    if (cmd === "fight") {
-      const amount = parseInt(opts.amount, 10);
-      if (!Number.isInteger(amount) || amount <= 0) return json({ type: 4, data: { content: `❌ סכום לא תקין.` } });
+    /* ----- fight amount ----- */
+if (cmd === "fight") {
+  const amount = parseInt(opts.amount, 10);
+  if (!Number.isInteger(amount) || amount <= 0) {
+    return json({ type: 4, data: { content: `❌ סכום לא תקין.` } });
+  }
 
-      // רק מודיע ויוצר כפתור הצטרפות; חיוב נעשה בעת הלחיצה
-      return json({
-        type: 4,
-        data: {
-          content:
-            `🥊 <@${userId}> מזמין לקרב על **${amount}**. לחצו "Join" כדי להצטרף — הזוכה יקבל **${amount * 2}**.`,
-          components: [
-            row([ btn(`fight_join:${userId}:${amount}`, "Join", 1) ])
-          ]
-        }
-      });
+  // יוצר הודעה עם Join ו-Cancel; החיוב נעשה רק בעת Join
+  return json({
+    type: 4,
+    data: {
+      content:
+        `🥊 <@${userId}> מזמין לקרב על **${amount}**. ` +
+        `לחצו **Join** כדי להצטרף — הזוכה יקבל **${amount * 2}**.\n` +
+        `> רק המכריז יכול ללחוץ **Cancel**.`,
+      components: [
+        row([
+          btn(`fight_join:${userId}:${amount}`, "Join", 1),
+          btn(`fight_cancel:${userId}:${amount}`, "Cancel", 4),
+        ])
+      ]
     }
+  });
+}
+
 
     /* ----- lottery amount ----- */
+/* ----- lottery amount ----- */
 /* ----- lottery amount ----- */
 if (cmd === "lottery") {
   const amount = parseInt(opts.amount, 10);
   if (!Number.isInteger(amount) || amount <= 0) {
+    // שגיאה מהירה (אפמרלית) אם הסכום לא תקין
     return json({ type: 4, data: { flags: 64, content: "❌ סכום לא תקין." } });
   }
 
-  // 1) אם יש הגרלה פתוחה שפג זמנה – נסגור ונכריז זוכה (הכול בתוך אותה תגובה מהירה)
-  const { data: open } = await SUPABASE
-    .from("lotteries")
-    .select("id, status, close_at, message_id, number")
-    .eq("status", "open")
-    .maybeSingle();
+  // >>> ACK מיידי כדי לא להיתקע על 3 שניות
+  const ack = { type: 4, data: { flags: 64, content: `🎟️ מעבד את ההשתתפות שלך (${amount})...` } };
 
-  if (open && open.close_at && Date.now() > new Date(open.close_at).getTime()) {
-    const { data: rows } = await SUPABASE
-      .from("lottery_entries")
-      .select("user_id, amount")
-      .eq("lottery_id", open.id);
+  (async () => {
+    try {
+      // 1) אם קיימת הגרלה פתוחה שפג תוקפה – נסגור ונכריז זוכה
+      const { data: open } = await SUPABASE
+        .from("lotteries")
+        .select("id,status,close_at,message_id,number")
+        .eq("status","open")
+        .maybeSingle();
 
-    const totalPast = (rows || []).reduce((s, r) => s + r.amount, 0);
+      if (open && open.close_at && Date.now() > new Date(open.close_at).getTime()) {
+        const { data: rows } = await SUPABASE
+          .from("lottery_entries")
+          .select("user_id,amount")
+          .eq("lottery_id", open.id);
 
-    if (totalPast > 0 && rows?.length) {
-      // בחירת זוכה פרופורציונית לסכום
-      let roll = Math.random() * totalPast;
-      let winner = rows[0].user_id;
-      for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
+        const totalPast = (rows || []).reduce((s, r) => s + r.amount, 0);
+        if (totalPast > 0 && rows?.length) {
+          // בחירת זוכה פרופורציונית לסכום שהכניסו
+          let roll = Math.random() * totalPast;
+          let winner = rows[0].user_id;
+          for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
 
-      const w = await getUser(winner);
-      await setUser(winner, { balance: (w.balance ?? 100) + totalPast });
+          const w = await getUser(winner);
+          await setUser(winner, { balance: (w.balance ?? 100) + totalPast });
 
-      // פרסום הזוכה (מציגים מספר הגרלה למשתמש)
-      await editOrPostLotteryMessage(open, lotteryWinnerEmbed(open.number, winner, totalPast));
+          // פרסום הזוכה – מציגים מספר גרלה, לא ID
+          await editOrPostLotteryMessage(open, lotteryWinnerEmbed(open.number, winner, totalPast));
+        }
+        // נסגרת סופית
+        await SUPABASE.from("lotteries").update({ status: "closed" }).eq("id", open.id);
+      }
+
+      // 2) בדיקת יתרה
+      const u = await getUser(userId);
+      if ((u.balance ?? 100) < amount) {
+        // לא ניתן לשלוח follow-up אפמרלי אחרי ACK, אז שולחים הודעה רגילה בערוץ
+        await postChannelMessage(channelId, { content: `<@${userId}> ❌ אין לך מספיק מטבעות (יתרה: ${u.balance}).` });
+        return;
+      }
+
+      // 3) לוקחים/פותחים הגרלה פתוחה (לא נוגעים ב-close_at אחרי שנקבע)
+      let { data: lot } = await SUPABASE
+        .from("lotteries")
+        .select("id,status,message_id,close_at,number")
+        .eq("status","open")
+        .maybeSingle();
+
+      if (!lot) {
+        const closeAt = new Date(Date.now() + 24*60*60*1000).toISOString();
+        const { data: newLot } = await SUPABASE
+          .from("lotteries")
+          .insert({ status: "open", close_at: closeAt })
+          .select()
+          .single();
+        lot = newLot;
+      }
+
+      // 4) מחייבים את המשתמש
+      await setUser(userId, { balance: (u.balance ?? 100) - amount });
+
+      // 5) מוסיפים/מעדכנים כניסה מצטברת
+      const { data: existing } = await SUPABASE
+        .from("lottery_entries")
+        .select("id,amount")
+        .eq("lottery_id", lot.id)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (existing) {
+        await SUPABASE.from("lottery_entries")
+          .update({ amount: existing.amount + amount })
+          .eq("id", existing.id);
+      } else {
+        await SUPABASE.from("lottery_entries")
+          .insert({ lottery_id: lot.id, user_id: userId, amount });
+      }
+
+      // 6) מחשבים סכומים ומעדכנים את הודעת ההגרלה בערוץ הייעודי
+      const { data: entries } = await SUPABASE
+        .from("lottery_entries")
+        .select("user_id,amount")
+        .eq("lottery_id", lot.id);
+
+      const total = (entries || []).reduce((s, e) => s + e.amount, 0);
+
+      // איחוד לפי משתמש (גם אם בעתיד יהיו ריבוי רשומות)
+      const sums = new Map();
+      for (const e of entries || []) sums.set(e.user_id, (sums.get(e.user_id) || 0) + e.amount);
+
+      const lines = [];
+      for (const [uid, amt] of sums) {
+        const pct = total ? Math.round((amt / total) * 100) : 100;
+        lines.push(`<@${uid}> → ${pct}%`);
+      }
+
+      // חשוב: האמבד החדש מקבל גם את close_at כדי להציג זמן סגירה קשיח
+      await editOrPostLotteryMessage(lot, lotteryOpenEmbed(lot.number, lot.close_at, total, lines));
+
+      // 7) אישור בערוץ שבו השתמשו בפקודה
+      await postChannelMessage(channelId, { content: `🎟️ <@${userId}> נכנס/ה להגרלה מספר #${lot.number} עם **${amount}**.` });
+    } catch (e) {
+      console.log("lottery async error:", e?.message || e);
     }
+  })();
 
-    // סוגרים את ההגרלה שפג תוקפה
-    await SUPABASE.from("lotteries").update({ status: "closed" }).eq("id", open.id);
-  }
-
-  // 2) בדיקת יתרה
-  const u = await getUser(userId);
-  if ((u.balance ?? 100) < amount) {
-    return json({ type: 4, data: { flags: 64, content: `❌ אין לך מספיק מטבעות (יתרה: ${u.balance}).` } });
-  }
-
-  // 3) לוקחים/פותחים הגרלה פתוחה
-  let { data: lot } = await SUPABASE
-    .from("lotteries")
-    .select("id, status, message_id, close_at, number")
-    .eq("status", "open")
-    .maybeSingle();
-
-  if (!lot) {
-    const { data: newLot } = await SUPABASE
-      .from("lotteries")
-      .insert({
-        status: "open",
-        close_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-      })
-      .select()
-      .single();
-    lot = newLot;
-  }
-
-  // 4) מחייבים את המשתמש
-  await setUser(userId, { balance: (u.balance ?? 100) - amount });
-
-  // 5) מוסיפים/מעדכנים כניסה מצטברת
-  const { data: existing } = await SUPABASE
-    .from("lottery_entries")
-    .select("id, amount")
-    .eq("lottery_id", lot.id)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (existing) {
-    await SUPABASE.from("lottery_entries")
-      .update({ amount: existing.amount + amount })
-      .eq("id", existing.id);
-  } else {
-    await SUPABASE.from("lottery_entries")
-      .insert({ lottery_id: lot.id, user_id: userId, amount });
-  }
-
-  // 6) מחשבים סכומים ומעדכנים את הודעת ההגרלה בערוץ הייעודי
-  const { data: entries } = await SUPABASE
-    .from("lottery_entries")
-    .select("user_id, amount")
-    .eq("lottery_id", lot.id);
-
-  const total = (entries || []).reduce((s, e) => s + e.amount, 0);
-
-  // מאחדים לפי משתמש (גם אם בעתיד יהיו ריבוי רשומות)
-  const sums = new Map();
-  for (const e of entries || []) sums.set(e.user_id, (sums.get(e.user_id) || 0) + e.amount);
-
-  const lines = [];
-  for (const [uid, amt] of sums) {
-    const pct = total ? Math.round((amt / total) * 100) : 100;
-    lines.push(`<@${uid}> → ${pct}%`);
-  }
-
-  await editOrPostLotteryMessage(lot, lotteryOpenEmbed(lot.number, total, lines));
-
-  // 7) לוודא שיש close_at (אם פתחו עכשיו)
-  if (!lot.close_at) {
-    await SUPABASE.from("lotteries")
-      .update({ close_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() })
-      .eq("id", lot.id);
-  }
-
-  // 8) תשובה סופית למשתמש — עם מספר הגרלה (לא ID)
-  return json({ type: 4, data: { content: `🎟️ נכנסת/הוספת **${amount}** להגרלה מספר #${lot.number}.` } });
+  // מחזירים את ה־ACK המיידי
+  return json(ack);
 }
 
 
@@ -588,6 +631,7 @@ if (cmd === "lottery") {
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
