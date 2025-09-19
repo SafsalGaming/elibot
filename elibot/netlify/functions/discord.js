@@ -556,26 +556,30 @@ if (cmd === "lottery") {
       .eq("status","open")
       .maybeSingle();
 
-    if (open && open.close_at && Date.now() > new Date(open.close_at).getTime()) {
-      const { data: rows } = await SUPABASE
-        .from("lottery_entries")
-        .select("user_id,amount")
-        .eq("lottery_id", open.id);
+if (open && open.close_at && Date.now() > new Date(open.close_at).getTime()) {
+  const { data: rows } = await SUPABASE
+    .from("lottery_entries")
+    .select("user_id,amount")
+    .eq("lottery_id", open.id);
 
-      const totalPast = (rows || []).reduce((s, r) => s + r.amount, 0);
-      if (totalPast > 0 && rows?.length) {
-        let roll = Math.random() * totalPast;
-        let winner = rows[0].user_id;
-        for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
-        const w = await getUser(winner);
-        await setUser(winner, { balance: (w.balance ?? 100) + totalPast });
-await editOrPostLotteryMessage(
-  lot,
-  lotteryOpenEmbed(lot.number, lot.created_at, lot.close_at, total, lines)
-);
-      }
-      await SUPABASE.from("lotteries").update({ status: "closed" }).eq("id", open.id);
-    }
+  const totalPast = (rows || []).reduce((s, r) => s + r.amount, 0);
+
+  if (totalPast > 0 && rows?.length) {
+    // בחירת זוכה פרופורציונית
+    let roll = Math.random() * totalPast;
+    let winner = rows[0].user_id;
+    for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
+
+    const w = await getUser(winner);
+    await setUser(winner, { balance: (w.balance ?? 100) + totalPast });
+
+    // ⬅️ זה הדבר החשוב: מכריזים על הזוכה, לא "פותחים" אמבד
+    await editOrPostLotteryMessage(open, lotteryWinnerEmbed(open.number, winner, totalPast));
+  }
+
+  await SUPABASE.from("lotteries").update({ status: "closed" }).eq("id", open.id);
+}
+
 
     // 2) בדיקת יתרה
     const u = await getUser(userId);
@@ -693,6 +697,7 @@ await editOrPostLotteryMessage(
     body: JSON.stringify({ type: 5 })
   };
 } // ← זה סוגר את export async function handler
+
 
 
 
