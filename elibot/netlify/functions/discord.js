@@ -174,7 +174,7 @@ function lotteryOpenEmbed(number, startAtISO, closeAtISO, total, lines) {
 
 function lotteryWinnerEmbed(number, winnerId, total) {
   return {
-    content: "||<@&1418491938704719883>||",
+    content: "||<@${winnerId}>\n<@&1418491938704719883>||",
     embeds: [{
       title: `**🏆 הזוכה בהגרלה #${number} הוא: **`,
       description:
@@ -756,29 +756,4 @@ await editOrPostLotteryMessage(
     body: JSON.stringify({ type: 5 })
   };
 } // ← זה סוגר את export async function handler
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
