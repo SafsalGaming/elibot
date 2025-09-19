@@ -171,7 +171,7 @@ function lotteryOpenEmbed(number, startAtISO, closeAtISO, total, lines) {
         `\n─────────────────────────────\n` +
         `🔔 **לקבלת עדכונים על הגרלות עתידיות**\n`,
       color: 0xFF9900,
-      footer: { text: `⏳ מסתיים ב־ ${fmtIL(closeAtISO)}` } // ממשיך להציג זמן סיום בפוטר
+      footer: { text: `⏳ ההגרלה מסתיימת ב־ ${fmtIL(closeAtISO)}` } // ממשיך להציג זמן סיום בפוטר
     }],
     content: "||<@&1418491938704719883>||"
   };
@@ -762,5 +762,6 @@ await editOrPostLotteryMessage(
     body: JSON.stringify({ type: 5 })
   };
 } // ← זה סוגר את export async function handler
+
 
 
