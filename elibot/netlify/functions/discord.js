@@ -546,6 +546,7 @@ if (cmd === "lottery") {
 
   // 1) defer כדי לעצור את הטיימאאוט של דיסקורד
   await deferEphemeralInteraction(body);
+  await deleteOriginalInteraction(body);
 
   try {
     // 2) סגירת הגרלה שפג תוקפה (אפשר להוציא ל-cron בהמשך)
@@ -651,14 +652,12 @@ if (cmd === "lottery") {
       });
     }
 
-    // 10) סוגרים את ה-"thinking..." ושולחים אפמרלי סופי
-    await deleteOriginalInteraction(body);
+    // 10) סוגרים את ה-"thinking..." ושולחים אפמרלי סופ
     await sendFollowupEphemeral(body, { content: `🎟️ עודכנה ההשתתפות שלך בהגרלה #${lot.number} (+${amount}).` });
 
     return { statusCode: 200, body: "" };
   } catch (e) {
     console.log("lottery error:", e?.message || e);
-    await deleteOriginalInteraction(body);
     await sendFollowupEphemeral(body, { content: "⚠️ תקלה זמנית בעיבוד ההגרלה. נסה/י שוב." });
     return { statusCode: 200, body: "" };
   }
@@ -676,6 +675,7 @@ if (cmd === "lottery") {
     body: JSON.stringify({ type: 5 })
   };
 } // ← זה סוגר את export async function handler
+
 
 
 
