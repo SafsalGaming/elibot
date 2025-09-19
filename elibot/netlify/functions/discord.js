@@ -498,140 +498,111 @@ if (cmd === "fight") {
 }
 
 
-    /* ----- lottery amount ----- */
-/* ----- lottery amount ----- */
-/* ----- lottery amount ----- */
 if (cmd === "lottery") {
   const amount = parseInt(opts.amount, 10);
   if (!Number.isInteger(amount) || amount <= 0) {
-    // שגיאה מהירה (אפמרלית) אם הסכום לא תקין
     return json({ type: 4, data: { flags: 64, content: "❌ סכום לא תקין." } });
   }
 
-  // >>> ACK מיידי כדי לא להיתקע על 3 שניות
-  const ack = { type: 4, data: { flags: 64, content: `🎟️ מעבד את ההשתתפות שלך (${amount})...` } };
+  try {
+    // 1) אם יש הגרלה פתוחה שפג זמנה – נסגור ונכריז זוכה (בלי לשנות close_at פעיל)
+    const { data: open } = await SUPABASE
+      .from("lotteries")
+      .select("id,status,close_at,message_id,number")
+      .eq("status","open")
+      .maybeSingle();
 
-  (async () => {
-    try {
-      // 1) אם קיימת הגרלה פתוחה שפג תוקפה – נסגור ונכריז זוכה
-      const { data: open } = await SUPABASE
-        .from("lotteries")
-        .select("id,status,close_at,message_id,number")
-        .eq("status","open")
-        .maybeSingle();
-
-      if (open && open.close_at && Date.now() > new Date(open.close_at).getTime()) {
-        const { data: rows } = await SUPABASE
-          .from("lottery_entries")
-          .select("user_id,amount")
-          .eq("lottery_id", open.id);
-
-        const totalPast = (rows || []).reduce((s, r) => s + r.amount, 0);
-        if (totalPast > 0 && rows?.length) {
-          // בחירת זוכה פרופורציונית לסכום שהכניסו
-          let roll = Math.random() * totalPast;
-          let winner = rows[0].user_id;
-          for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
-
-          const w = await getUser(winner);
-          await setUser(winner, { balance: (w.balance ?? 100) + totalPast });
-
-          // פרסום הזוכה – מציגים מספר גרלה, לא ID
-          await editOrPostLotteryMessage(open, lotteryWinnerEmbed(open.number, winner, totalPast));
-        }
-        // נסגרת סופית
-        await SUPABASE.from("lotteries").update({ status: "closed" }).eq("id", open.id);
-      }
-
-      // 2) בדיקת יתרה
-      const u = await getUser(userId);
-      if ((u.balance ?? 100) < amount) {
-        // לא ניתן לשלוח follow-up אפמרלי אחרי ACK, אז שולחים הודעה רגילה בערוץ
-        await postChannelMessage(channelId, { content: `<@${userId}> ❌ אין לך מספיק מטבעות (יתרה: ${u.balance}).` });
-        return;
-      }
-
-      // 3) לוקחים/פותחים הגרלה פתוחה (לא נוגעים ב-close_at אחרי שנקבע)
-      let { data: lot } = await SUPABASE
-        .from("lotteries")
-        .select("id,status,message_id,close_at,number")
-        .eq("status","open")
-        .maybeSingle();
-
-      if (!lot) {
-        const closeAt = new Date(Date.now() + 24*60*60*1000).toISOString();
-        const { data: newLot } = await SUPABASE
-          .from("lotteries")
-          .insert({ status: "open", close_at: closeAt })
-          .select()
-          .single();
-        lot = newLot;
-      }
-
-      // 4) מחייבים את המשתמש
-      await setUser(userId, { balance: (u.balance ?? 100) - amount });
-
-      // 5) מוסיפים/מעדכנים כניסה מצטברת
-      const { data: existing } = await SUPABASE
-        .from("lottery_entries")
-        .select("id,amount")
-        .eq("lottery_id", lot.id)
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (existing) {
-        await SUPABASE.from("lottery_entries")
-          .update({ amount: existing.amount + amount })
-          .eq("id", existing.id);
-      } else {
-        await SUPABASE.from("lottery_entries")
-          .insert({ lottery_id: lot.id, user_id: userId, amount });
-      }
-
-      // 6) מחשבים סכומים ומעדכנים את הודעת ההגרלה בערוץ הייעודי
-      const { data: entries } = await SUPABASE
+    if (open && open.close_at && Date.now() > new Date(open.close_at).getTime()) {
+      const { data: rows } = await SUPABASE
         .from("lottery_entries")
         .select("user_id,amount")
-        .eq("lottery_id", lot.id);
+        .eq("lottery_id", open.id);
 
-      const total = (entries || []).reduce((s, e) => s + e.amount, 0);
+      const totalPast = (rows || []).reduce((s, r) => s + r.amount, 0);
+      if (totalPast > 0 && rows?.length) {
+        // בחירת זוכה פרופורציונית
+        let roll = Math.random() * totalPast;
+        let winner = rows[0].user_id;
+        for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
 
-      // איחוד לפי משתמש (גם אם בעתיד יהיו ריבוי רשומות)
-      const sums = new Map();
-      for (const e of entries || []) sums.set(e.user_id, (sums.get(e.user_id) || 0) + e.amount);
+        const w = await getUser(winner);
+        await setUser(winner, { balance: (w.balance ?? 100) + totalPast });
 
-      const lines = [];
-      for (const [uid, amt] of sums) {
-        const pct = total ? Math.round((amt / total) * 100) : 100;
-        lines.push(`<@${uid}> → ${pct}%`);
+        await editOrPostLotteryMessage(open, lotteryWinnerEmbed(open.number, winner, totalPast));
       }
-
-      // חשוב: האמבד החדש מקבל גם את close_at כדי להציג זמן סגירה קשיח
-      await editOrPostLotteryMessage(lot, lotteryOpenEmbed(lot.number, lot.close_at, total, lines));
-
-      // 7) אישור בערוץ שבו השתמשו בפקודה
-      await postChannelMessage(channelId, { content: `🎟️ <@${userId}> נכנס/ה להגרלה מספר #${lot.number} עם **${amount}**.` });
-    } catch (e) {
-      console.log("lottery async error:", e?.message || e);
+      await SUPABASE.from("lotteries").update({ status: "closed" }).eq("id", open.id);
     }
-  })();
 
-  // מחזירים את ה־ACK המיידי
-  return json(ack);
-}
+    // 2) בדיקת יתרה
+    const u = await getUser(userId);
+    if ((u.balance ?? 100) < amount) {
+      return json({ type: 4, data: { flags: 64, content: `❌ אין לך מספיק מטבעות (יתרה: ${u.balance}).` } });
+    }
 
+    // 3) לוקחים/פותחים הגרלה פתוחה (לא נוגעים ב־close_at אם קיים)
+    let { data: lot } = await SUPABASE
+      .from("lotteries")
+      .select("id,status,message_id,close_at,number")
+      .eq("status","open")
+      .maybeSingle();
 
-    // לא מוכר
-    return json({ type: 4, data: { content: `הפקודה לא מוכרת.` } });
+    if (!lot) {
+      const closeAt = new Date(Date.now() + 24*60*60*1000).toISOString();
+      const { data: newLot } = await SUPABASE
+        .from("lotteries")
+        .insert({ status: "open", close_at: closeAt })
+        .select()
+        .single();
+      lot = newLot;
+    }
+
+    // 4) מחייבים את המשתמש
+    await setUser(userId, { balance: (u.balance ?? 100) - amount });
+
+    // 5) מוסיפים/מעדכנים כניסה מצטברת
+    const { data: existing } = await SUPABASE
+      .from("lottery_entries")
+      .select("id,amount")
+      .eq("lottery_id", lot.id)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (existing) {
+      await SUPABASE.from("lottery_entries")
+        .update({ amount: existing.amount + amount })
+        .eq("id", existing.id);
+    } else {
+      await SUPABASE.from("lottery_entries")
+        .insert({ lottery_id: lot.id, user_id: userId, amount });
+    }
+
+    // 6) מחשבים סכומים ומעדכנים את הודעת ההגרלה בערוץ הייעודי
+    const { data: entries } = await SUPABASE
+      .from("lottery_entries")
+      .select("user_id,amount")
+      .eq("lottery_id", lot.id);
+
+    const total = (entries || []).reduce((s, e) => s + e.amount, 0);
+
+    const sums = new Map();
+    for (const e of entries || []) sums.set(e.user_id, (sums.get(e.user_id) || 0) + e.amount);
+
+    const lines = [];
+    for (const [uid, amt] of sums) {
+      const pct = total ? Math.round((amt / total) * 100) : 100;
+      lines.push(`<@${uid}> → ${pct}%`);
+    }
+
+    await editOrPostLotteryMessage(lot, lotteryOpenEmbed(lot.number, lot.close_at, total, lines));
+
+    // 7) תשובה אחרונה למשתמש (אפמרלית)
+    return json({ type: 4, data: { flags: 64, content: `🎟️ נכנסת/הוספת **${amount}** להגרלה מספר #${lot.number}.` } });
+  } catch (e) {
+    console.log("lottery error:", e?.message || e);
+    return json({ type: 4, data: { flags: 64, content: "⚠️ תקלה זמנית בעיבוד ההגרלה. נסה/י שוב." } });
   }
-
-  // אחרת
-  return {
-    statusCode: 200,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: 5 })
-  };
 }
+
 
 
 
