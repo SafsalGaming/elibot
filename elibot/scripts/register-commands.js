@@ -14,51 +14,75 @@ const API = "https://discord.com/api/v10";
 const headers = {
   "Authorization": `Bot ${TOKEN}`,
   "Content-Type": "application/json",
-  "User-Agent": "DiscordBot (register,1.0)",
+  "User-Agent": "DiscordBot (register,1.0)"
 };
 
+// כל הפקודות:
 const commands = [
   { name: "balance", description: "Show your coin balance", type: 1 },
-  { name: "daily",   description: "Claim daily bonus (+50, 24h cooldown)", type: 1 },
-  { name: "work",    description: "Work for +10 (1h cooldown)",            type: 1 },
+  { name: "daily",   description: "Claim daily bonus (+50 every 24h)", type: 1 },
+  { name: "work",    description: "Earn +10 coins (hourly)", type: 1 },
+
   {
-    name: "coinflip", description: "Bet on a coin flip (50/50)", type: 1,
+    name: "coinflip",
+    description: "Bet on a coin flip",
+    type: 1,
     options: [
-      { name: "choice", description: "heads or tails", type: 3, required: true,
-        choices: [{ name: "heads", value: "heads" }, { name: "tails", value: "tails" }] },
+      {
+        name: "choice", description: "heads or tails", type: 3, required: true,
+        choices: [{ name: "heads", value: "heads" }, { name: "tails", value: "tails" }]
+      },
       { name: "amount", description: "Amount to bet", type: 4, required: true, min_value: 1 }
     ]
   },
+
   {
-    name: "dice", description: "Roll vs bot (higher wins, 1:1)", type: 1,
-    options: [{ name: "amount", description: "Amount to bet", type: 4, required: true, min_value: 1 }]
+    name: "dice",
+    description: "Roll a d6 vs bot (higher wins)",
+    type: 1,
+    options: [
+      { name: "amount", description: "Amount to bet", type: 4, required: true, min_value: 1 }
+    ]
   },
+
   {
-    name: "give", description: "Give coins to another user", type: 1,
+    name: "give",
+    description: "Give coins to another user",
+    type: 1,
     options: [
       { name: "user", description: "Target user", type: 6, required: true },
       { name: "amount", description: "Amount to give", type: 4, required: true, min_value: 1 }
     ]
   },
-  { // ← פקודה יחידה ללוטו
-    name: "lottery",
-    description: "Join the current lottery with an amount (creates one if none)",
-    type: 1,
-    options: [{ name: "amount", description: "Your contribution", type: 4, required: true, min_value: 1 }]
-  },
+
+  { name: "top", description: "Show top 10 richest", type: 1 },
+
   {
     name: "roulette",
-    description: "Progressive roulette (20% bust each round, 1.1x → 1.2x → 1.3x ...)",
+    description: "Risk bet with rising multiplier (20% bust each hit)",
     type: 1,
-    options: [{ name: "amount", description: "Stake amount", type: 4, required: true, min_value: 1 }]
+    options: [
+      { name: "amount", description: "Bet amount", type: 4, required: true, min_value: 1 }
+    ]
   },
+
   {
     name: "fight",
-    description: "Open a 1v1 fight; first to join. Winner takes both stakes.",
+    description: "Open a duel invitation; winner takes both bets",
     type: 1,
-    options: [{ name: "amount", description: "Stake amount (each player)", type: 4, required: true, min_value: 1 }]
+    options: [
+      { name: "amount", description: "Bet amount for the fight", type: 4, required: true, min_value: 1 }
+    ]
   },
-  { name: "top", description: "Show top 10 richest users", type: 1 },
+
+  {
+    name: "lottery",
+    description: "Join the current lottery with an amount (opens one if none exists)",
+    type: 1,
+    options: [
+      { name: "amount", description: "Amount to join", type: 4, required: true, min_value: 1 }
+    ]
+  }
 ];
 
 const mode = process.argv.includes("--list") ? "list"
@@ -93,5 +117,4 @@ async function main() {
   const after = await put.json();
   console.log("Registered:", after.map(c => ({ id: c.id, name: c.name })));
 }
-
 main().catch(e => { console.error(e); process.exit(1); });
