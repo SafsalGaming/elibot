@@ -1,7 +1,7 @@
 // scripts/register-commands.js
 import { fetch } from "undici";
 
-const APP_ID   = process.env.DISCORD_APP_ID;
+const APP_ID   = process.env.DISCORD_APPLICATION_ID;
 const TOKEN    = process.env.DISCORD_TOKEN;
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
 
@@ -17,7 +17,7 @@ const headers = {
   "User-Agent": "DiscordBot (register,1.0)"
 };
 
-// כל הפקודות:
+// === כל הפקודות (שמור על שמות באנגלית, lowercase) ===
 const commands = [
   { name: "balance", description: "Show your coin balance", type: 1 },
   { name: "daily",   description: "Claim daily bonus (+50 every 24h)", type: 1 },
@@ -81,52 +81,90 @@ const commands = [
     type: 1,
     options: [
       { name: "amount", description: "Amount to join", type: 4, required: true, min_value: 1 }
-    
-
     ]
   },
-  {
-  name: "lottery_updates_role",
-  description: "Toggle the Lottery Updates role for yourself",
-  type: 1,
-  dm_permission: false
-}
-];
 
+  {
+    name: "lottery_updates_role",
+    description: "Toggle the Lottery Updates role for yourself",
+    type: 1
+  }
+];
 
 const mode = process.argv.includes("--list") ? "list"
            : process.argv.includes("--clear") ? "clear"
            : "register";
 
+async function assertAppMatchesToken() {
+  const me = await fetch(`${API}/applications/@me`, { headers });
+  if (!me.ok) {
+    console.error("Failed /applications/@me:", me.status, await me.text());
+    process.exit(1);
+  }
+  const app = await me.json();
+  console.log("Token belongs to Application ID:", app.id);
+  if (String(app.id) !== String(APP_ID)) {
+    console.error("❌ APP_ID does not match token's application. Fix DISCORD_APPLICATION_ID.");
+    process.exit(1);
+  }
+}
+
+async function listGuildCommands(base) {
+  const r = await fetch(base, { headers });
+  if (!r.ok) {
+    console.error("List failed:", r.status, await r.text());
+    process.exit(1);
+  }
+  const arr = await r.json();
+  return arr;
+}
+
+async function clearGuildCommands(base) {
+  const current = await listGuildCommands(base);
+  for (const cmd of current) {
+    const del = await fetch(`${base}/${cmd.id}`, { method: "DELETE", headers });
+    console.log(`DELETE ${cmd.name}:`, del.status);
+  }
+}
+
+async function registerIndividually(base) {
+  const created = [];
+  for (const c of commands) {
+    const res = await fetch(base, { method: "POST", headers, body: JSON.stringify(c) });
+    const text = await res.text();
+    console.log(`POST ${c.name}:`, res.status, text);
+    if (!res.ok) {
+      console.error(`❌ Failed to create "${c.name}" →`, text);
+      process.exit(1);
+    }
+    created.push(JSON.parse(text));
+  }
+  return created;
+}
+
 async function main() {
+  console.log("Using APP_ID:", APP_ID, "GUILD_ID:", GUILD_ID);
+  await assertAppMatchesToken();
+
   const base = `${API}/applications/${APP_ID}/guilds/${GUILD_ID}/commands`;
 
   if (mode === "list") {
-    const r = await fetch(base, { headers });
-    console.log("Guild commands:", (await r.json()).map(c => ({ id: c.id, name: c.name })));
+    const listed = await listGuildCommands(base);
+    console.log("Guild commands:", listed.map(c => ({ id: c.id, name: c.name })));
     return;
   }
 
   if (mode === "clear") {
-    const r = await fetch(base, { headers });
-    const data = await r.json();
-    for (const cmd of data) {
-      const del = await fetch(`${base}/${cmd.id}`, { method: "DELETE", headers });
-      console.log(`Deleted ${cmd.name}: ${del.status}`);
-    }
+    await clearGuildCommands(base);
     return;
   }
 
-  const put = await fetch(base, { method: "PUT", headers, body: JSON.stringify(commands) });
-  if (!put.ok) {
-    const body = await put.text();
-    console.error("Register failed:", put.status, body);
-    process.exit(1);
-  }
-  const after = await put.json();
-  console.log("Registered:", after.map(c => ({ id: c.id, name: c.name })));
+  // רישום נקי: מוחקים ואז מוסיפים אחת-אחת כדי לדעת בדיוק אם משהו נופל
+  await clearGuildCommands(base);
+  const created = await registerIndividually(base);
+
+  const finalList = await listGuildCommands(base);
+  console.log("✅ Registered:", finalList.map(c => ({ id: c.id, name: c.name })));
 }
+
 main().catch(e => { console.error(e); process.exit(1); });
-
-
-
