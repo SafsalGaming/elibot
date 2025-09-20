@@ -535,7 +535,7 @@ if (cmd === "top") {
     });
   }
 
-  const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${u.balance}`);
+  const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${u.balance}🪙`);
 
   return json({
     type: 4,
@@ -803,5 +803,6 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
