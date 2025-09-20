@@ -582,36 +582,51 @@ if (cmd === "top") {
 }
 
 
-    /* ----- roulette amount ----- */
-    if (cmd === "roulette") {
-      const amount = parseInt(opts.amount, 10);
-      if (!Number.isInteger(amount) || amount <= 0) {
-        return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
+   /* ----- roulette amount ----- */
+if (cmd === "roulette") {
+  const amount = parseInt(opts.amount, 10);
+  if (!Number.isInteger(amount) || amount <= 0) {
+    return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
+  }
+
+  const u = await getUser(userId);
+  if ((u.balance ?? 100) < amount) {
+    return json({ type: 4, data: { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance}.` } });
+  }
+
+  // מחייבים את המשתמש על ההימור
+  await setUser(userId, { balance: (u.balance ?? 100) - amount });
+
+  // 🔥 בדיקת BUST כבר בתחילת המשחק
+  const immediateBust = Math.random() < ROULETTE_BUST_CHANCE; // 20%
+  if (immediateBust) {
+    // הפסיד מיד, אין כפתורים
+    return json({
+      type: 4,
+      data: {
+        content: `🎰 **BUST!** הפסדת (${amount}).`,
+        components: []
       }
+    });
+  }
 
-      const u = await getUser(userId);
-      if ((u.balance ?? 100) < amount) {
-        return json({ type: 4, data: { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance}.` } });
-      }
+  // אם לא התפוצץ, מתחילים מסיבוב 1 עם מכפיל 1.1
+  const round = 1;
+  const payout = Math.floor(amount * rouletteCompoundedMultiplier(round));
 
-      await setUser(userId, { balance: (u.balance ?? 100) - amount });
-
-      const round = 1;
-      const payout = Math.floor(amount * rouletteCompoundedMultiplier(round));
-
-      return json({
-        type: 4,
-        data: {
-          content: `🎰 רולטה — סכום נוכחי: **${payout}**`,
-          components: [
-            row([
-              btn(`roulette:${userId}:${amount}:${round}:hit`,  "המשך", 3),
-              btn(`roulette:${userId}:${amount}:${round}:cash`, "צא",    4),
-            ])
-          ]
-        }
-      });
+  return json({
+    type: 4,
+    data: {
+      content: `🎰 רולטה — סכום נוכחי: **${payout}**`,
+      components: [
+        row([
+          btn(`roulette:${userId}:${amount}:${round}:hit`,  "המשך", 3),
+          btn(`roulette:${userId}:${amount}:${round}:cash`, "צא",    4),
+        ])
+      ]
     }
+  });
+}
 
     /* ----- fight amount ----- */
     if (cmd === "fight") {
@@ -833,6 +848,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
