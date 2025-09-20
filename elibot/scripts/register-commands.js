@@ -81,16 +81,18 @@ const commands = [
     type: 1,
     options: [
       { name: "amount", description: "Amount to join", type: 4, required: true, min_value: 1 }
-      {
+    
+
+    ]
+  },
+  {
   name: "lottery_updates_role",
   description: "Toggle the Lottery Updates role for yourself",
   type: 1,
   dm_permission: false
 }
-
-    ]
-  }
 ];
+
 
 const mode = process.argv.includes("--list") ? "list"
            : process.argv.includes("--clear") ? "clear"
@@ -125,4 +127,5 @@ async function main() {
   console.log("Registered:", after.map(c => ({ id: c.id, name: c.name })));
 }
 main().catch(e => { console.error(e); process.exit(1); });
+
 
