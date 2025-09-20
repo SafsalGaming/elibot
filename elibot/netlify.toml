@@ -1,7 +1,7 @@
 [build]
-base = "elibot"                # זו התיקייה שבה יושבים package.json וה-scripts
-publish = "elibot/elibot"      # אם זה מה שאתה באמת צריך; לא קריטי לפקודות
-functions = "elibot/elibot/netlify/functions"
+base = "elibot"                         # פה נמצא package.json שלך
+publish = "elibot"                      # תיקייה שקיימת בפועל; אם אין אתר סטטי, זה עדיין חייב להתקיים
+functions = "elibot/netlify/functions"  # נתיב אמיתי לפונקציות
 command = "npm install --no-audit --no-fund && node scripts/register-commands.js"
 
 
@@ -14,5 +14,6 @@ command = "npm install --no-audit --no-fund && node scripts/register-commands.js
 [[scheduled.functions]]
   path = "cron-lottery"
   schedule = "*/5 * * * *"
+
 
 
