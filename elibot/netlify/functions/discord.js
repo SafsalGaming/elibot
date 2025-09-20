@@ -16,6 +16,7 @@ const SUPABASE = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 // ערוצי יעד
 const ALLOWED_GAMBLING_CHANNEL = "1418196736958005361"; // הימורים (roulette / fight / coinflip / dice / daily / work)
 const LOTTERY_CHANNEL_ID       = "1418491365259477084"; // כאן נשלחת/מתעדכנת הודעת הלוטו
+const UPDATES_ROLE_ID = "1418491938704719883";
 
 // ⭐️ כפתור רול (החזרת הפיצ'ר שנמחק בטעות)
 // אפשר להשתמש ב-custom_id: "role:<ROLE_ID>" לכל כפתור כזה
@@ -199,8 +200,7 @@ function lotteryOpenEmbed(number, startAtISO, closeAtISO, total, lines) {
         `🎲 **סיכויי זכייה:**\n` +
         (lines.length ? lines.join("\n") : "_עדיין אין משתתפים נוספים_") +
         `\n─────────────────────────────\n` +
-        `🔔 **לקבלת עדכונים על הגרלות עתידיות**\n` +
-        `||<@&1418491938704719883>||`,
+        "🔔 **לקבלת עדכונים על הגרלות עתידיות**\n'/lottery_updates_role`",
       color: 0xFF9900,
       footer: { text: `⏳ מסתיים ב־ ${fmtIL(closeAtISO)}` }
     }]
@@ -414,6 +414,36 @@ export async function handler(event) {
     if (GAMBLING_CMDS.has(cmd) && channelId && channelId !== ALLOWED_GAMBLING_CHANNEL) {
       return json({ type: 4, data: { content: `🎲 הימורים רק בחדר <#${ALLOWED_GAMBLING_CHANNEL}>` } });
     }
+        /* ----- lottery_updates_role ----- */
+/* ----- lottery_updates_role ----- */
+if (cmd === "lottery_updates_role") {
+  const guildId = body.guild_id;
+  if (!guildId) {
+    return json({ type: 4, data: { flags: 64, content: "❌ הפקודה זמינה רק בשרת." } });
+  }
+
+  const already = (body.member?.roles || []).includes(UPDATES_ROLE_ID);
+
+  try {
+    if (already) {
+      // אם יש למשתמש את הרול – נוריד לו
+      const r = await fetch(`${API}/guilds/${guildId}/members/${userId}/roles/${UPDATES_ROLE_ID}`, {
+        method: "DELETE",
+        headers: BOT_HEADERS,
+      });
+      if (!r.ok) throw new Error(`removeRole ${r.status}: ${await r.text()}`);
+      return json({ type: 4, data: { flags: 64, content: "❎ הסרתי לך את רול העדכונים." } });
+    } else {
+      // אם אין – נוסיף
+      await addRoleToMember(guildId, userId, UPDATES_ROLE_ID);
+      return json({ type: 4, data: { flags: 64, content: "✅ קיבלת את רול העדכונים 📢" } });
+    }
+  } catch (e) {
+    console.log("updates_role error:", e?.message || e);
+    return json({ type: 4, data: { flags: 64, content: "⚠️ לא הצלחתי לשנות את הרול. ודא שלבוט יש Manage Roles והרול מתחת לרול של הבוט." } });
+  }
+}
+
 
     /* ----- balance ----- */
     if (cmd === "balance") {
@@ -803,6 +833,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
