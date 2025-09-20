@@ -49,6 +49,14 @@ async function deferEphemeralInteraction(body) {
     body: JSON.stringify({ type: 5, data: { flags: 64 } }), // defer ephemeral
   });
 }
+async function deferPublicInteraction(body) {
+  await fetch(`${API}/interactions/${body.id}/${body.token}/callback`, {
+    method: "POST",
+    headers: NOAUTH_HEADERS,
+    body: JSON.stringify({ type: 5 }), // defer PUBLIC (בלי flags)
+  });
+}
+
 
 async function deleteOriginalInteraction(body) {
   const appId = body.application_id || process.env.DISCORD_APP_ID;
@@ -166,9 +174,15 @@ const rouletteCompoundedMultiplier = (round) => {
 /* ========== LOTTERY HELPERS / EMBEDS ========== */
 // תאריך/שעה בפורמט ישראלי עם פסיק בין תאריך לשעה: DD/MM/YY, HH:MM
 function fmtIL(dt) {
-  const d = new Date(dt);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(-2)}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return new Intl.DateTimeFormat("he-IL", {
+    timeZone: "Asia/Jerusalem",
+    year: "2-digit",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(dt));
 }
 
 // אמבד פתוח של לוטו – שורה 2 = זמן פתיחה בלבד
@@ -575,9 +589,9 @@ export async function handler(event) {
         return json({ type: 4, data: { flags: 64, content: "❌ סכום לא תקין." } });
       }
 
-      // שולחים defer אפמרלי כדי לעצור timeout — ומוחקים את ההודעה מיד כדי שלא יראו "thinking"
-      await deferEphemeralInteraction(body);
-      deleteOriginalInteraction(body); // בלי await
+await deferPublicInteraction(body);
+// לא מוחקים יותר את ההודעה
+
 
       try {
         // 1) אם יש הגרלה פתוחה שפג זמנה — נסגור, נכריז זוכה בהודעה נפרדת, ונסמן סגורה
@@ -620,8 +634,9 @@ export async function handler(event) {
         // 2) בדיקת יתרה
         const u = await getUser(userId);
         if ((u.balance ?? 100) < amount) {
-          await postChannelMessage(channelId, { content: `<@${userId}> ❌ אין לך מספיק מטבעות (יתרה: ${u.balance}).` });
-          return { statusCode: 200, body: "" };
+await editOriginal(body, { content: `❌ אין לך מספיק מטבעות (יתרה: ${u.balance}).` });
+return { statusCode: 200, body: "" };
+
         }
 
         // 3) לוקחים/פותחים הגרלה פתוחה
@@ -732,14 +747,22 @@ export async function handler(event) {
           lotteryOpenEmbed(lot.number, lot.created_at, lot.close_at, total, lines)
         );
 
+        const confirmText = wasFirst
+  ? `<@${userId}> פתח את הגרלה מספר #${lot.number} עם סכום של **${amount}** מטבעות 💰`
+  : `<@${userId}> הוסיף **${amount}** מטבעות להגרלה 💰`;
+
+await editOriginal(body, { content: confirmText });
+
+
         // 8) אישור פומבי/פרטי לפי מה שכבר עובד אצלך (כרגע לא שולחים הודעה נוספת כאן)
         // אם תרצה - כאן אפשר לעשות editOriginal(...) עם אישור, אבל לא משנים טקסטים קיימים.
 
         return { statusCode: 200, body: "" };
       } catch (e) {
         console.log("lottery error:", e?.message || e);
-        await postChannelMessage(channelId, { content: `<@${userId}> ⚠️ תקלה זמנית בעיבוד ההגרלה. נסה/י שוב.` });
-        return { statusCode: 200, body: "" };
+        await editOriginal(body, { content: `⚠️ תקלה זמנית בעיבוד ההגרלה. נסה/י שוב.` });
+return { statusCode: 200, body: "" };
+
       }
     }
 
@@ -754,3 +777,4 @@ export async function handler(event) {
     body: JSON.stringify({ type: 5 })
   };
 }
+
