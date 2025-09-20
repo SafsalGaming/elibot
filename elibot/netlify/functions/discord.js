@@ -188,7 +188,7 @@ function fmtIL(dt) {
 // אמבד פתוח של לוטו – שורה 2 = זמן פתיחה בלבד
 function lotteryOpenEmbed(number, startAtISO, closeAtISO, total, lines) {
   return {
-    content: "",
+    content: '||<@&1418491938704719883>||',
     embeds: [{
       title: `🎉  **הגרלה מספר #${number}**  🎉`,
       description:
@@ -209,7 +209,7 @@ function lotteryOpenEmbed(number, startAtISO, closeAtISO, total, lines) {
 
 function lotteryWinnerEmbed(number, winnerId, total) {
   return {
-    content: "",
+    content: '||<@${winnerId}>\n<@&1418491938704719883>||',
     embeds: [{
       title: `**🏆 הזוכה בהגרלה #${number} הוא: **`,
       description:
@@ -803,6 +803,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
