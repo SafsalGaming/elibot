@@ -1,8 +1,9 @@
 [build]
-base = "elibot"
-publish = "elibot"
-functions = "elibot/netlify/functions"
-command = "npm ci && node scripts/register-commands.js"
+base = "elibot"                # זו התיקייה שבה יושבים package.json וה-scripts
+publish = "elibot/elibot"      # אם זה מה שאתה באמת צריך; לא קריטי לפקודות
+functions = "elibot/elibot/netlify/functions"
+command = "npm install --no-audit --no-fund && node scripts/register-commands.js"
+
 
 
 [functions]
@@ -13,4 +14,5 @@ command = "npm ci && node scripts/register-commands.js"
 [[scheduled.functions]]
   path = "cron-lottery"
   schedule = "*/5 * * * *"
+
 
