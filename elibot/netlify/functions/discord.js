@@ -200,7 +200,7 @@ function lotteryOpenEmbed(number, startAtISO, closeAtISO, total, lines) {
         `🎲 **סיכויי זכייה:**\n` +
         (lines.length ? lines.join("\n") : "_עדיין אין משתתפים נוספים_") +
         `\n─────────────────────────────\n` +
-        "🔔 **לקבלת עדכונים על הגרלות עתידיות**\n'/lottery_updates_role`",
+        "🔔 **לקבלת עדכונים על הגרלות עתידיות**\n`/lottery_updates_role`",
       color: 0xFF9900,
       footer: { text: `⏳ מסתיים ב־ ${fmtIL(closeAtISO)}` }
     }]
@@ -833,6 +833,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
