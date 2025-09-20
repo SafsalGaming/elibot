@@ -1,79 +1,95 @@
-// netlify/functions/cron-lottery.js
+// netlify/functions/lottery-cron.js
 import { createClient } from "@supabase/supabase-js";
 import { fetch } from "undici";
 
 const SUPABASE = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
 const API = "https://discord.com/api/v10";
 const BOT_HEADERS = {
   "Authorization": `Bot ${process.env.DISCORD_TOKEN}`,
   "Content-Type": "application/json",
-  "User-Agent": "DiscordBot (cron,1.0)"
+  "User-Agent": "DiscordBot (functions,1.0)"
 };
 
-function lotteryWinnerEmbed(number, winnerId, total) {
+const LOTTERY_CHANNEL_ID = "1418491365259477084";
+const LOTTERY_ROLE_ID    = "1418491938704719883";
+
+function fmtIL(dt) {
+  const d = new Date(dt);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(-2)}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function postChannelMessage(channelId, payload) {
+  const r = await fetch(`${API}/channels/${channelId}/messages`, {
+    method: "POST", headers: BOT_HEADERS, body: JSON.stringify(payload)
+  });
+  if (!r.ok) throw new Error(`post msg ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+
+function winnerEmbed(number, winnerId, total) {
   return {
-    content: "",
     embeds: [{
       title: `**🏆 הזוכה בהגרלה #${number} הוא: **`,
       description:
         `─────────────────────\n <@${winnerId}> 🎉\n` +
         `─────────────────────\n**💰 פרס:** ${total} מטבעות`,
-      color: 16754176
+      color: 0xFF9900
     }]
   };
 }
 
-async function editMessage(channelId, messageId, payload) {
-  const r = await fetch(`${API}/channels/${channelId}/messages/${messageId}`, {
-    method: "PATCH", headers: BOT_HEADERS, body: JSON.stringify(payload)
-  });
-  if (!r.ok) throw new Error(`edit msg ${r.status}: ${await r.text()}`);
-  return r.json();
-}
-
 export async function handler() {
-  // כל ההגרלות הפתוחות מבוגרות מ-24 שעות
-  const { data: old } = await SUPABASE
-    .from("lotteries")
-    .select("*")
-    .eq("is_open", true)
-    .lt("created_at", new Date(Date.now() - 24*60*60*1000).toISOString());
+  try {
+    const { data: openLots } = await SUPABASE
+      .from("lotteries")
+      .select("id, status, close_at, created_at, number")
+      .eq("status", "open");
 
-  if (!old || !old.length) {
-    return { statusCode: 200, body: "no lotteries to close" };
-  }
+    const now = Date.now();
+    for (const lot of (openLots || [])) {
+      if (!lot.close_at) continue;
+      if (now <= new Date(lot.close_at).getTime()) continue;
 
-  for (const lotto of old) {
-    const { data: entries } = await SUPABASE
-      .from("lottery_entries").select("user_id, amount").eq("lottery_id", lotto.id);
+      const { data: rows } = await SUPABASE
+        .from("lottery_entries")
+        .select("user_id, amount")
+        .eq("lottery_id", lot.id);
 
-    const total = (entries || []).reduce((s, e) => s + e.amount, 0);
-    if (!total) {
-      // אין משתתפים – נסגור בלי זוכה
-      await SUPABASE.from("lotteries")
-        .update({ is_open: false, closed_at: new Date().toISOString() })
-        .eq("id", lotto.id);
-      // אפשר גם לערוך הודעה ל"בטלה" אם תרצה
-      continue;
+      const total = (rows || []).reduce((s, r) => s + r.amount, 0);
+
+      if (total > 0 && rows?.length) {
+        let roll = Math.random() * total;
+        let winner = rows[0].user_id;
+        for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
+
+        // credit winner
+        const { data: udata } = await SUPABASE.from("users").select("balance").eq("id", winner).maybeSingle();
+        const bal = udata?.balance ?? 100;
+        await SUPABASE.from("users").upsert({ id: winner, balance: bal + total });
+
+        // announce winner as a NEW message with a real mention in content
+        await postChannelMessage(LOTTERY_CHANNEL_ID, {
+          content: `||<@&${LOTTERY_ROLE_ID}>||\n<@${winner}>`,
+          ...winnerEmbed(lot.number, winner, total)
+        });
+      } else {
+        await postChannelMessage(LOTTERY_CHANNEL_ID, {
+          content: `||<@&${LOTTERY_ROLE_ID}>||`,
+          embeds: [{ title: `**הגרלה #${lot.number} נסגרה ללא משתתפים**`, description: `לא היו כניסות בהגרלה זו.`, color: 0xFF9900 }]
+        });
+      }
+
+      await SUPABASE
+        .from("lotteries")
+        .update({ status: "closed", closed_at: new Date().toISOString() })
+        .eq("id", lot.id);
     }
 
-    // בחירה משוקללת
-    const r = Math.floor(Math.random() * total);
-    let acc = 0, winner = entries[0].user_id;
-    for (const e of entries) { acc += e.amount; if (r < acc) { winner = e.user_id; break; } }
-
-    // זיכוי מנצח
-    const { data: winnerRow } = await SUPABASE.from("users").select("balance").eq("id", winner).maybeSingle();
-    const newBal = (winnerRow?.balance ?? 100) + total;
-    await SUPABASE.from("users").upsert({ id: winner, balance: newBal });
-
-    // סגירה ועדכון הודעה
-    await SUPABASE.from("lotteries")
-      .update({ is_open: false, closed_at: new Date().toISOString() })
-      .eq("id", lotto.id);
-
-    await editMessage(lotto.channel_id, lotto.message_id, lotteryWinnerEmbed(lotto.number, winner, total));
+    return { statusCode: 200, body: "ok" };
+  } catch (e) {
+    console.log("lottery-cron error:", e?.message || e);
+    return { statusCode: 500, body: "error" };
   }
-
-  return { statusCode: 200, body: "closed" };
 }
