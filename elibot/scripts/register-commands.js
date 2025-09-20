@@ -119,27 +119,19 @@ async function listGuildCommands(base) {
   return arr;
 }
 
-async function clearGuildCommands(base) {
-  const current = await listGuildCommands(base);
-  for (const cmd of current) {
-    const del = await fetch(`${base}/${cmd.id}`, { method: "DELETE", headers });
-    console.log(`DELETE ${cmd.name}:`, del.status);
-  }
-}
 
-async function registerIndividually(base) {
-  const created = [];
-  for (const c of commands) {
-    const res = await fetch(base, { method: "POST", headers, body: JSON.stringify(c) });
-    const text = await res.text();
-    console.log(`POST ${c.name}:`, res.status, text);
-    if (!res.ok) {
-      console.error(`❌ Failed to create "${c.name}" →`, text);
-      process.exit(1);
-    }
-    created.push(JSON.parse(text));
+async function bulkPutGuildCommands(base, cmds) {
+  const res = await fetch(base, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(cmds)
+  });
+  const text = await res.text();
+  console.log("PUT /commands:", res.status, text);
+  if (!res.ok) {
+    throw new Error(`Bulk PUT failed: ${res.status} ${text}`);
   }
-  return created;
+  return JSON.parse(text);
 }
 
 async function main() {
@@ -154,17 +146,18 @@ async function main() {
     return;
   }
 
-  if (mode === "clear") {
-    await clearGuildCommands(base);
-    return;
-  }
+if (mode === "clear") {
+  await bulkPutGuildCommands(base, []); // מוחק הכל בבקשה אחת
+  console.log("Cleared all guild commands");
+  return;
+}
 
-  // רישום נקי: מוחקים ואז מוסיפים אחת-אחת כדי לדעת בדיוק אם משהו נופל
-  await clearGuildCommands(base);
-  const created = await registerIndividually(base);
 
-  const finalList = await listGuildCommands(base);
-  console.log("✅ Registered:", finalList.map(c => ({ id: c.id, name: c.name })));
+await bulkPutGuildCommands(base, commands);
+const finalList = await listGuildCommands(base);
+console.log("✅ Registered:", finalList.map(c => ({ id: c.id, name: c.name })));
+
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
+
