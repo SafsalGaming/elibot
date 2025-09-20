@@ -1,7 +1,9 @@
 [build]
-  base = "elibot"
-  publish = "."
-  command = ""
+base = "elibot"
+publish = "elibot"
+functions = "elibot/netlify/functions"
+command = "npm ci && node scripts/register-commands.js"
+
 
 [functions]
   node_bundler = "esbuild"
@@ -11,3 +13,4 @@
 [[scheduled.functions]]
   path = "cron-lottery"
   schedule = "*/5 * * * *"
+
