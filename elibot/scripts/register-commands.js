@@ -1,7 +1,7 @@
 // scripts/register-commands.js
 import { fetch } from "undici";
 
-const APP_ID   = process.env.DISCORD_APPLICATION_ID;
+const APP_ID   = process.env.DISCORD_APP_ID;
 const TOKEN    = process.env.DISCORD_TOKEN;
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
 
@@ -127,5 +127,6 @@ async function main() {
   console.log("Registered:", after.map(c => ({ id: c.id, name: c.name })));
 }
 main().catch(e => { console.error(e); process.exit(1); });
+
 
 
