@@ -519,12 +519,38 @@ export async function handler(event) {
     }
 
     /* ----- top ----- */
-    if (cmd === "top") {
-      const { data } = await SUPABASE.from("users").select("id, balance").order("balance", { ascending: false }).limit(10);
-      if (!data || data.length === 0) return json({ type: 4, data: { content: `אין עדיין נתונים ללוח הובלות.` } });
-      const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${u.balance}`);
-      return json({ type: 4, data: { content: `🏆 טופ 10 עשירים:\n${lines.join("\n")}` } });
+if (cmd === "top") {
+  const { data } = await SUPABASE
+    .from("users")
+    .select("id, balance")
+    .order("balance", { ascending: false })
+    .limit(10);
+
+  if (!data || data.length === 0) {
+    return json({
+      type: 4,
+      data: {
+        content: `אין עדיין נתונים ללוח הובלות.`
+      }
+    });
+  }
+
+  const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${u.balance}`);
+
+  return json({
+    type: 4,
+    data: {
+      embeds: [
+        {
+          title: "🏆 טופ 10 עשירים",
+          description: lines.join("\n"),
+          color: 0xf1c40f // צבע זהב
+        }
+      ]
     }
+  });
+}
+
 
     /* ----- roulette amount ----- */
     if (cmd === "roulette") {
@@ -777,4 +803,5 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
