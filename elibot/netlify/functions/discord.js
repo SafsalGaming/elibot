@@ -432,7 +432,7 @@ if (cmd === "lottery_updates_role") {
         headers: BOT_HEADERS,
       });
       if (!r.ok) throw new Error(`removeRole ${r.status}: ${await r.text()}`);
-      return json({ type: 4, data: { flags: 64, content: "❎ הסרתי לך את רול העדכונים." } });
+      return json({ type: 4, data: { flags: 64, content: "❌ הסרתי לך את רול העדכונים" } });
     } else {
       // אם אין – נוסיף
       await addRoleToMember(guildId, userId, UPDATES_ROLE_ID);
@@ -833,6 +833,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
