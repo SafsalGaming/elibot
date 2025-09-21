@@ -158,7 +158,7 @@ async function editChannelMessage(channelId, messageId, payload) {
 
 /* ========== ROULETTE HELPERS ========== */
 // הסתברות פיצוץ קבועה
-const ROULETTE_BUST_CHANCE = 0.20;
+const ROULETTE_BUST_CHANCE = 0.25;
 
 // מכפיל אקספוננציאלי עד לסיבוב הנתון:
 // round=1 => 1.1
@@ -955,6 +955,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
