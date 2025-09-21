@@ -690,16 +690,18 @@ if (cmd === "top") {
 
    /* ----- roulette amount ----- */
 if (cmd === "roulette") {
-    await deferPublicInteraction(body);
+  await deferPublicInteraction(body);
 
   const amount = parseInt(opts.amount, 10);
   if (!Number.isInteger(amount) || amount <= 0) {
-   await editOriginal(body,  { content: `❌ סכום הימור לא תקין.` } );
+    await editOriginal(body, { content: `❌ סכום הימור לא תקין.` });
+    return { statusCode: 200, body: "" };
   }
 
   const u = await getUser(userId);
   if ((u.balance ?? 100) < amount) {
-    await editOriginal(body, { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance}.` } );
+    await editOriginal(body, { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance ?? 100}.` });
+    return { statusCode: 200, body: "" };
   }
 
   // מחייבים את המשתמש על ההימור
@@ -708,13 +710,11 @@ if (cmd === "roulette") {
   // 🔥 בדיקת BUST לסיבוב 1 (5%)
   const immediateBust = Math.random() < rouletteBustChance(1);
   if (immediateBust) {
-    return json({
-      type: 4,
-      data: {
-        content: `🎰 **BUST!** הפסדת (${amount}).`,
-        components: []
-      }
+    await editOriginal(body, {
+      content: `🎰 **BUST!** הפסדת (${amount}).`,
+      components: [] // נטרל כפתורים אם היו
     });
+    return { statusCode: 200, body: "" };
   }
 
   // אם שרדנו את סיבוב 1 – מציגים Round 1 עם מכפיל 1.1
@@ -722,19 +722,18 @@ if (cmd === "roulette") {
   const payout = Math.floor(amount * rouletteCompoundedMultiplier(round));
   const nextBustPct = Math.round(rouletteBustChance(round + 1) * 100);
 
-  return json({
-    type: 4,
-    data: {
-      content: `🎰 רולטה — סיבוב ${round} · סכום נוכחי: **${payout}** (סיכוי פיצוץ הבא: ${nextBustPct}%)`,
-      components: [
-        row([
-          btn(`roulette:${userId}:${amount}:${round}:hit`,  "המשך", 3),
-          btn(`roulette:${userId}:${amount}:${round}:cash`, "צא",    4),
-        ])
-      ]
-    }
+  await editOriginal(body, {
+    content: `🎰 רולטה — סיבוב ${round} · סכום נוכחי: **${payout}** (סיכוי פיצוץ הבא: ${nextBustPct}%)`,
+    components: [
+      row([
+        btn(`roulette:${userId}:${amount}:${round}:hit`,  "המשך", 3),
+        btn(`roulette:${userId}:${amount}:${round}:cash`, "צא",    4),
+      ])
+    ]
   });
+  return { statusCode: 200, body: "" };
 }
+
 
     /* ----- fight amount ----- */
    /* ----- fight amount ----- */
@@ -960,6 +959,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
