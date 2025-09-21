@@ -416,31 +416,42 @@ export async function handler(event) {
     }
         /* ----- lottery_updates_role ----- */
 /* ----- lottery_updates_role ----- */
+/* ----- lottery_updates_role ----- */
 if (cmd === "lottery_updates_role") {
+  await deferPublicInteraction(body); // אם תרצה אפמרלי: החלף ל-deferEphemeralInteraction
+
   const guildId = body.guild_id;
   if (!guildId) {
-    return json({ type: 4, data: { flags: 64, content: "❌ הפקודה זמינה רק בשרת." } });
+    await editOriginal(body, { content: "❌ הפקודה זמינה רק בשרת." });
+    return { statusCode: 200, body: "" };
   }
 
   const already = (body.member?.roles || []).includes(UPDATES_ROLE_ID);
 
   try {
     if (already) {
-      // אם יש למשתמש את הרול – נוריד לו
+      // אם יש למשתמש את הרול – נוריד
       const r = await fetch(`${API}/guilds/${guildId}/members/${userId}/roles/${UPDATES_ROLE_ID}`, {
         method: "DELETE",
         headers: BOT_HEADERS,
       });
       if (!r.ok) throw new Error(`removeRole ${r.status}: ${await r.text()}`);
-      return json({ type: 4, data: { flags: 64, content: "❌ הסרתי לך את רול העדכונים" } });
+
+      await editOriginal(body, { content: "❌ הסרתי לך את רול העדכונים" });
+      return { statusCode: 200, body: "" };
     } else {
       // אם אין – נוסיף
       await addRoleToMember(guildId, userId, UPDATES_ROLE_ID);
-      return json({ type: 4, data: { flags: 64, content: "✅ קיבלת את רול העדכונים 📢" } });
+
+      await editOriginal(body, { content: "✅ קיבלת את רול העדכונים 📢" });
+      return { statusCode: 200, body: "" };
     }
   } catch (e) {
     console.log("updates_role error:", e?.message || e);
-    return json({ type: 4, data: { flags: 64, content: "⚠️ לא הצלחתי לשנות את הרול. ודא שלבוט יש Manage Roles והרול מתחת לרול של הבוט." } });
+    await editOriginal(body, {
+      content: "⚠️ לא הצלחתי לשנות את הרול. ודא שלבוט יש Manage Roles והרול מתחת לרול של הבוט."
+    });
+    return { statusCode: 200, body: "" };
   }
 }
 
@@ -721,28 +732,32 @@ if (cmd === "roulette") {
 }
 
     /* ----- fight amount ----- */
-    if (cmd === "fight") {
-      const amount = parseInt(opts.amount, 10);
-      if (!Number.isInteger(amount) || amount <= 0) {
-        return json({ type: 4, data: { content: `❌ סכום לא תקין.` } });
-      }
+   /* ----- fight amount ----- */
+if (cmd === "fight") {
+  await deferPublicInteraction(body); // שולח ACK ציבורי ("thinking...")
 
-      return json({
-        type: 4,
-        data: {
-          content:
-            `🥊 <@${userId}> מזמין לקרב על **${amount}**. ` +
-            `לחצו **Join** כדי להצטרף — הזוכה יקבל **${amount * 2}**.\n` +
-            `> רק המכריז יכול ללחוץ **Cancel**.`,
-          components: [
-            row([
-              btn(`fight_join:${userId}:${amount}`, "Join", 1),
-              btn(`fight_cancel:${userId}:${amount}`, "Cancel", 4),
-            ])
-          ]
-        }
-      });
-    }
+  const amount = parseInt(opts.amount, 10);
+  if (!Number.isInteger(amount) || amount <= 0) {
+    await editOriginal(body, { content: "❌ סכום לא תקין." });
+    return { statusCode: 200, body: "" };
+  }
+
+  await editOriginal(body, {
+    content:
+      `🥊 <@${userId}> מזמין לקרב על **${amount}**. ` +
+      `לחצו **Join** כדי להצטרף — הזוכה יקבל **${amount * 2}**.\n` +
+      `> רק המכריז יכול ללחוץ **Cancel**.`,
+    components: [
+      row([
+        btn(`fight_join:${userId}:${amount}`, "Join", 1),
+        btn(`fight_cancel:${userId}:${amount}`, "Cancel", 4),
+      ])
+    ]
+  });
+
+  return { statusCode: 200, body: "" };
+}
+
 
     /* ----- LOTTERY ----- */
     if (cmd === "lottery") {
@@ -940,6 +955,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
