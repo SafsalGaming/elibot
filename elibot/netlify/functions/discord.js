@@ -417,6 +417,7 @@ export async function handler(event) {
         /* ----- lottery_updates_role ----- */
 /* ----- lottery_updates_role ----- */
 if (cmd === "lottery_updates_role") {
+  await deferEphemeralInteraction(body);
   const guildId = body.guild_id;
   if (!guildId) {
     return json({ type: 4, data: { flags: 64, content: "❌ הפקודה זמינה רק בשרת." } });
@@ -447,12 +448,14 @@ if (cmd === "lottery_updates_role") {
 
     /* ----- balance ----- */
     if (cmd === "balance") {
+        await deferEphemeralInteraction(body);
       const u = await getUser(userId);
       return json({ type: 4, data: { content: `💰 ${username}, היתרה שלך: **${u.balance}** מטבעות` } });
     }
 
     /* ----- daily (+50 / 24h) ----- */
     if (cmd === "daily") {
+      await deferEphemeralInteraction(body);
       const now = Date.now();
       const u = await getUser(userId);
       const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
@@ -469,6 +472,7 @@ if (cmd === "lottery_updates_role") {
 
     /* ----- work (+10 / 1h) ----- */
     if (cmd === "work") {
+      await deferEphemeralInteraction(body);
       const now = Date.now();
       const u = await getUser(userId);
       const last = u.last_work ? new Date(u.last_work).getTime() : 0;
@@ -485,6 +489,7 @@ if (cmd === "lottery_updates_role") {
 
     /* ----- coinflip choice amount ----- */
     if (cmd === "coinflip") {
+      await deferEphemeralInteraction(body);
       const choice = String(opts.choice || "").toLowerCase();
       const amount = parseInt(opts.amount, 10);
       if (!["heads", "tails"].includes(choice)) {
@@ -508,6 +513,7 @@ if (cmd === "lottery_updates_role") {
 
     /* ----- dice amount (d6 vs bot) ----- */
     if (cmd === "dice") {
+      await deferEphemeralInteraction(body);
       const amount = parseInt(opts.amount, 10);
       if (!Number.isInteger(amount) || amount <= 0) {
         return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
@@ -533,6 +539,7 @@ if (cmd === "lottery_updates_role") {
 
     /* ----- give user amount ----- */
     if (cmd === "give") {
+      await deferEphemeralInteraction(body);
       const target = opts.user;
       const amount = parseInt(opts.amount, 10);
       if (!target || target === userId) return json({ type: 4, data: { content: `❌ משתמש לא תקין.` } });
@@ -550,6 +557,7 @@ if (cmd === "lottery_updates_role") {
 
     /* ----- top ----- */
 if (cmd === "top") {
+  await deferEphemeralInteraction(body);
   const { data } = await SUPABASE
     .from("users")
     .select("id, balance")
@@ -584,6 +592,7 @@ if (cmd === "top") {
 
    /* ----- roulette amount ----- */
 if (cmd === "roulette") {
+  await deferEphemeralInteraction(body);
   const amount = parseInt(opts.amount, 10);
   if (!Number.isInteger(amount) || amount <= 0) {
     return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
@@ -630,6 +639,7 @@ if (cmd === "roulette") {
 
     /* ----- fight amount ----- */
     if (cmd === "fight") {
+      await deferEphemeralInteraction(body);
       const amount = parseInt(opts.amount, 10);
       if (!Number.isInteger(amount) || amount <= 0) {
         return json({ type: 4, data: { content: `❌ סכום לא תקין.` } });
@@ -848,6 +858,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
