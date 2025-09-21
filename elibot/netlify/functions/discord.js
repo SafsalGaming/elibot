@@ -452,59 +452,37 @@ if (cmd === "lottery_updates_role") {
     }
 
     /* ----- daily (+50 / 24h) ----- */
-    if (cmd === "daily") {
-      const now = Date.now();
-      const u = await getUser(userId);
-      const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
-      if (now - last < DAY) {
-        const left = DAY - (now - last);
-        const h = Math.floor(left / HOUR);
-        const m = Math.floor((left % HOUR) / (60 * 1000));
-        return json({ type: 4, data: { content: `⏳ כבר לקחת היום. נסה שוב בעוד ${h} שעות ו־${m} דקות.` } });
-      }
-      const balance = (u.balance ?? 100) + 50;
-      await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
-      return json({ type: 4, data: { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${balance}**` } });
+   /* ----- daily (+50 / 24h) ----- */
+if (cmd === "daily") {
+  // שולח "Thinking..." אפמרלי. אם אתה רוצה פומבי: החלף ל-deferPublicInteraction
+  await deferEphemeralInteraction(body);
+
+  try {
+    const now = Date.now();
+    const u = await getUser(userId);
+    const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
+
+    // בקירור
+    if (now - last < DAY) {
+      const left = DAY - (now - last);
+      const h = Math.floor(left / HOUR);
+      const m = Math.floor((left % HOUR) / (60 * 1000));
+      await editOriginal(body, { content: `⏳ כבר לקחת היום. נסה שוב בעוד ${h} שעות ו־${m} דקות.` });
+      return { statusCode: 200, body: "" }; // ← תמיד לסיים כך אחרי defer
     }
 
-    /* ----- work (+10 / 1h) ----- */
-    if (cmd === "work") {
-      const now = Date.now();
-      const u = await getUser(userId);
-      const last = u.last_work ? new Date(u.last_work).getTime() : 0;
-      if (now - last < HOUR) {
-        const left = HOUR - (now - last);
-        const m = Math.floor(left / (60 * 1000));
-        const s = Math.floor((left % (60 * 1000)) / 1000);
-        return json({ type: 4, data: { content: `⏳ עבדת לא מזמן. נסה שוב בעוד ${m} דק׳ ו־${s} שניות.` } });
-      }
-      const balance = (u.balance ?? 100) + 10;
-      await setUser(userId, { balance, last_work: new Date(now).toISOString() });
-      return json({ type: 4, data: { content: `👷 קיבלת **10** מטבעות על עבודה. יתרה: **${balance}**` } });
-    }
+    // מעניקים
+    const balance = (u.balance ?? 100) + 50;
+    await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
 
-    /* ----- coinflip choice amount ----- */
-    if (cmd === "coinflip") {
-      const choice = String(opts.choice || "").toLowerCase();
-      const amount = parseInt(opts.amount, 10);
-      if (!["heads", "tails"].includes(choice)) {
-        return json({ type: 4, data: { content: `❌ בחירה לא תקינה. בחר heads או tails.` } });
-      }
-      if (!Number.isInteger(amount) || amount <= 0) {
-        return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
-      }
-      const u = await getUser(userId);
-      if (amount > u.balance) return json({ type: 4, data: { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance}.` } });
-
-      const flip = Math.random() < 0.5 ? "heads" : "tails";
-      const won  = (flip === choice);
-      const balance = u.balance + (won ? amount : -amount);
-      await setUser(userId, { balance });
-      return json({
-        type: 4,
-        data: { content: `🪙 יצא **${flip}** — ${won ? `זכית! +${amount}` : `הפסדת... -${amount}`} | יתרה: **${balance}**` }
-      });
-    }
+    await editOriginal(body, { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${balance}**` });
+    return { statusCode: 200, body: "" };
+  } catch (e) {
+    console.log("daily error:", e);
+    await editOriginal(body, { content: "⚠️ תקלה זמנית. נסה שוב מאוחר יותר." });
+    return { statusCode: 200, body: "" };
+  }
+}
 
     /* ----- dice amount (d6 vs bot) ----- */
     if (cmd === "dice") {
@@ -848,6 +826,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
