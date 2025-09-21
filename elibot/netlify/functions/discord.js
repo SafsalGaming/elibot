@@ -445,11 +445,13 @@ if (cmd === "lottery_updates_role") {
 }
 
 
-    /* ----- balance ----- */
-    if (cmd === "balance") {
-      const u = await getUser(userId);
-      return json({ type: 4, data: { content: `💰 ${username}, היתרה שלך: **${u.balance}** מטבעות` } });
-    }
+if (cmd === "balance") {
+  await deferEphemeralInteraction(body); // או public
+  const u = await getUser(userId);
+  await editOriginal(body, { content: `💰 ${username}, היתרה שלך: **${u.balance}** מטבעות` });
+  return { statusCode: 200, body: "" };
+}
+
 
     /* ----- daily (+50 / 24h) ----- */
    /* ----- daily (+50 / 24h) ----- */
@@ -826,6 +828,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
