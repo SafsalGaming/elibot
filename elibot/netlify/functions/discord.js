@@ -455,7 +455,7 @@ if (cmd === "lottery_updates_role") {
    /* ----- daily (+50 / 24h) ----- */
 if (cmd === "daily") {
   // שולח "Thinking..." אפמרלי. אם אתה רוצה פומבי: החלף ל-deferPublicInteraction
-  await deferEphemeralInteraction(body);
+  await deferPublicInteraction(body);
 
   try {
     const now = Date.now();
@@ -826,6 +826,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
