@@ -417,7 +417,6 @@ export async function handler(event) {
         /* ----- lottery_updates_role ----- */
 /* ----- lottery_updates_role ----- */
 if (cmd === "lottery_updates_role") {
-  await deferEphemeralInteraction(body);
   const guildId = body.guild_id;
   if (!guildId) {
     return json({ type: 4, data: { flags: 64, content: "❌ הפקודה זמינה רק בשרת." } });
@@ -448,67 +447,28 @@ if (cmd === "lottery_updates_role") {
 
     /* ----- balance ----- */
     if (cmd === "balance") {
-        await deferEphemeralInteraction(body);
       const u = await getUser(userId);
       return json({ type: 4, data: { content: `💰 ${username}, היתרה שלך: **${u.balance}** מטבעות` } });
     }
 
     /* ----- daily (+50 / 24h) ----- */
-if (cmd === "daily") {
-  // תבחר אם פרטי/פומבי
-  await deferEphemeralInteraction(body); // או deferPublicInteraction(body)
-
-  try {
-    // מביאים מצב רק בשביל טקסט יפה
-    const u = await getUser(userId);
-    const base = (u.balance ?? 100);
-
-    const nowISO = new Date().toISOString();
-    const cutoffISO = new Date(Date.now() - DAY).toISOString(); // 24h אחורה
-
-    // עדכון א ט ו מ י: יתבצע רק אם last_daily ריק או <= cutoff
-    const { data: updated, error } = await SUPABASE
-      .from("users")
-      .update({
-        balance: base + 50,        // אין סכימת SQL, אז משתמשים בבסיס שהבאנו
-        last_daily: nowISO,        // נעדכן רק אם התנאי עובר
-      })
-      .eq("id", userId)
-      .or(`last_daily.is.null,last_daily.lte.${cutoffISO}`)
-      .select("balance");
-
-    if (error) {
-      console.log("daily update error:", error);
-      await editOriginal(body, { content: "⚠️ תקלה זמנית. נסה שוב מאוחר יותר." });
-      return { statusCode: 200, body: "" };
-    }
-
-    // אם לא עודכן כלום – סימן שכבר לקחת ב־24 שעות האחרונות
-    if (!updated || updated.length === 0) {
+    if (cmd === "daily") {
+      const now = Date.now();
+      const u = await getUser(userId);
       const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
-      const left = Math.max(0, DAY - (Date.now() - last));
-      const h = Math.floor(left / HOUR);
-      const m = Math.floor((left % HOUR) / (60 * 1000));
-      await editOriginal(body, { content: `⏳ כבר לקחת היום. נסה שוב בעוד ${h} שעות ו-${m} דקות.` });
-      return { statusCode: 200, body: "" };
+      if (now - last < DAY) {
+        const left = DAY - (now - last);
+        const h = Math.floor(left / HOUR);
+        const m = Math.floor((left % HOUR) / (60 * 1000));
+        return json({ type: 4, data: { content: `⏳ כבר לקחת היום. נסה שוב בעוד ${h} שעות ו־${m} דקות.` } });
+      }
+      const balance = (u.balance ?? 100) + 50;
+      await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
+      return json({ type: 4, data: { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${balance}**` } });
     }
-
-    // הצליח – מחזירים הודעת הצלחה
-    const newBalance = updated[0].balance;
-    await editOriginal(body, { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${newBalance}**` });
-    return { statusCode: 200, body: "" };
-  } catch (e) {
-    console.log("daily unexpected error:", e);
-    await editOriginal(body, { content: "⚠️ תקלה זמנית. נסה שוב מאוחר יותר." });
-    return { statusCode: 200, body: "" };
-  }
-}
-
-
 
     /* ----- work (+10 / 1h) ----- */
     if (cmd === "work") {
-      await deferEphemeralInteraction(body);
       const now = Date.now();
       const u = await getUser(userId);
       const last = u.last_work ? new Date(u.last_work).getTime() : 0;
@@ -525,7 +485,6 @@ if (cmd === "daily") {
 
     /* ----- coinflip choice amount ----- */
     if (cmd === "coinflip") {
-      await deferEphemeralInteraction(body);
       const choice = String(opts.choice || "").toLowerCase();
       const amount = parseInt(opts.amount, 10);
       if (!["heads", "tails"].includes(choice)) {
@@ -549,7 +508,6 @@ if (cmd === "daily") {
 
     /* ----- dice amount (d6 vs bot) ----- */
     if (cmd === "dice") {
-      await deferEphemeralInteraction(body);
       const amount = parseInt(opts.amount, 10);
       if (!Number.isInteger(amount) || amount <= 0) {
         return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
@@ -575,7 +533,6 @@ if (cmd === "daily") {
 
     /* ----- give user amount ----- */
     if (cmd === "give") {
-      await deferEphemeralInteraction(body);
       const target = opts.user;
       const amount = parseInt(opts.amount, 10);
       if (!target || target === userId) return json({ type: 4, data: { content: `❌ משתמש לא תקין.` } });
@@ -593,7 +550,6 @@ if (cmd === "daily") {
 
     /* ----- top ----- */
 if (cmd === "top") {
-  await deferEphemeralInteraction(body);
   const { data } = await SUPABASE
     .from("users")
     .select("id, balance")
@@ -628,7 +584,6 @@ if (cmd === "top") {
 
    /* ----- roulette amount ----- */
 if (cmd === "roulette") {
-  await deferEphemeralInteraction(body);
   const amount = parseInt(opts.amount, 10);
   if (!Number.isInteger(amount) || amount <= 0) {
     return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
@@ -675,7 +630,6 @@ if (cmd === "roulette") {
 
     /* ----- fight amount ----- */
     if (cmd === "fight") {
-      await deferEphemeralInteraction(body);
       const amount = parseInt(opts.amount, 10);
       if (!Number.isInteger(amount) || amount <= 0) {
         return json({ type: 4, data: { content: `❌ סכום לא תקין.` } });
@@ -894,14 +848,6 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
-
-
-
-
-
-
-
-
 
 
 
