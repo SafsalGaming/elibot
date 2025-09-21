@@ -463,7 +463,7 @@ if (cmd === "lottery_updates_role") {
         const left = DAY - (now - last);
         const h = Math.floor(left / HOUR);
         const m = Math.floor((left % HOUR) / (60 * 1000));
-        return json({ type: 4, data: { content: `⏳ כבר לקחת היום. נסה שוב בעוד ${h} שעות ו־${m} דקות.` } });
+      await editOriginal(body, { content: `⏳ כבר לקחת היום. נסה שוב בעוד ${h} שעות ו־${m} דקות.` } );
       }
       const balance = (u.balance ?? 100) + 50;
       await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
@@ -858,6 +858,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
