@@ -452,6 +452,73 @@ if (cmd === "balance") {
   return { statusCode: 200, body: "" };
 }
 
+    /* ----- work (+10 / 1h) ----- */
+if (cmd === "work") {
+  await deferPublicInteraction(body);
+
+  try {
+    const now = Date.now();
+    const u = await getUser(userId);
+    const last = u.last_work ? new Date(u.last_work).getTime() : 0;
+
+    if (now - last < HOUR) {
+      const left = HOUR - (now - last);
+      const m = Math.floor(left / (60 * 1000));
+      const s = Math.floor((left % (60 * 1000)) / 1000);
+      await editOriginal(body, { content: `⏳ עבדת לא מזמן. נסה שוב בעוד ${m} דק׳ ו־${s} שניות.` });
+      return { statusCode: 200, body: "" };
+    }
+
+    const balance = (u.balance ?? 100) + 10;
+    await setUser(userId, { balance, last_work: new Date(now).toISOString() });
+    await editOriginal(body, { content: `👷 קיבלת **10** מטבעות על עבודה. יתרה: **${balance}**` });
+    return { statusCode: 200, body: "" };
+  } catch (e) {
+    console.log("work error:", e);
+    await editOriginal(body, { content: `⚠️ תקלה זמנית. נסה שוב מאוחר יותר.` });
+    return { statusCode: 200, body: "" };
+  }
+}
+
+    /* ----- coinflip choice amount ----- */
+if (cmd === "coinflip") {
+  await deferPublicInteraction(body);
+
+  try {
+    const choice = String(opts.choice || "").toLowerCase();
+    const amount = parseInt(opts.amount, 10);
+
+    if (!["heads", "tails"].includes(choice)) {
+      await editOriginal(body, { content: `❌ בחירה לא תקינה. בחר heads או tails.` });
+      return { statusCode: 200, body: "" };
+    }
+    if (!Number.isInteger(amount) || amount <= 0) {
+      await editOriginal(body, { content: `❌ סכום הימור לא תקין.` });
+      return { statusCode: 200, body: "" };
+    }
+
+    const u = await getUser(userId);
+    if (amount > (u.balance ?? 100)) {
+      await editOriginal(body, { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance ?? 100}.` });
+      return { statusCode: 200, body: "" };
+    }
+
+    const flip = Math.random() < 0.5 ? "heads" : "tails";
+    const won  = (flip === choice);
+    const balance = (u.balance ?? 100) + (won ? amount : -amount);
+
+    await setUser(userId, { balance });
+    await editOriginal(body, {
+      content: `🪙 יצא **${flip}** — ${won ? `זכית! +${amount}` : `הפסדת... -${amount}`} | יתרה: **${balance}**`
+    });
+    return { statusCode: 200, body: "" };
+  } catch (e) {
+    console.log("coinflip error:", e);
+    await editOriginal(body, { content: `⚠️ תקלה זמנית. נסה שוב מאוחר יותר.` });
+    return { statusCode: 200, body: "" };
+  }
+}
+
 
     /* ----- daily (+50 / 24h) ----- */
    /* ----- daily (+50 / 24h) ----- */
@@ -848,6 +915,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
