@@ -454,41 +454,27 @@ if (cmd === "lottery_updates_role") {
     }
 
     /* ----- daily (+50 / 24h) ----- */
-    if (cmd === "daily") {
+ if (cmd === "daily") {
   await deferPublicInteraction(body);
 
-  const now = new Date();
-  const cutoff = new Date(now.getTime() - DAY).toISOString();
-
-  // משיכת מצב נוכחי רק בשביל ההודעה (לא חובה, אבל נחמד להראות יתרה)
+  const now = Date.now();
   const u = await getUser(userId);
+  const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
 
-  // עדכון אטומי: יזכה רק אם last_daily ריק או קטן מה-cutoff
-  const { data: updated, error } = await SUPABASE
-    .from("users")
-    .update({
-      balance: (u.balance ?? 100) + 50,
-      last_daily: now.toISOString(),
-    })
-    .eq("id", userId)
-    .or(`last_daily.is.null,last_daily.lt.${cutoff}`)
-    .select("balance"); // מחזיר את השורה המעודכנת אם זה באמת עודכן
-
-  if (error) {
-    console.log("daily update error:", error);
-    await editOriginal(body, { content: `⚠️ תקלה זמנית. נסה שוב מאוחר יותר.` });
-    return { statusCode: 200, body: "" };
-  }
-
-  if (!updated || updated.length === 0) {
-    // לא עודכן כלום — סימן שכבר לקח היום
-    const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
-    const left = DAY - (Date.now() - last);
-    const h = Math.max(0, Math.floor(left / HOUR));
-    const m = Math.max(0, Math.floor((left % HOUR) / (60 * 1000)));
+  if (now - last < DAY) {
+    const left = DAY - (now - last);
+    const h = Math.floor(left / HOUR);
+    const m = Math.floor((left % HOUR) / (60 * 1000));
     await editOriginal(body, { content: `⏳ כבר לקחת היום. נסה שוב בעוד ${h} שעות ו-${m} דקות.` });
-    return { statusCode: 200, body: "" };
+    return { statusCode: 200, body: "" };  // ← עצור כאן
   }
+
+  const balance = (u.balance ?? 100) + 50;
+  await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
+  await editOriginal(body, { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${balance}**` });
+  return { statusCode: 200, body: "" };    // ← וגם כאן לסגור יפה
+}
+
 
   // הצליח לעדכן — מגיע בונוס
   const newBalance = updated[0].balance;
@@ -885,6 +871,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
