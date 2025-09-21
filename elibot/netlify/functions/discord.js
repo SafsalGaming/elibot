@@ -454,20 +454,54 @@ if (cmd === "lottery_updates_role") {
     }
 
     /* ----- daily (+50 / 24h) ----- */
- if (cmd === "daily") {
-  await deferPublicInteraction(body);
+if (cmd === "daily") {
+  // פומבי או אפמרלי לבחירתך:
+  await deferPublicInteraction(body); // או deferEphemeralInteraction(body)
 
-  const now = Date.now();
-  const u = await getUser(userId);
-  const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
+  try {
+    // מביאים מצב רק בשביל הודעה נוחה
+    const u = await getUser(userId);
+    const base = (u.balance ?? 100);
+    const nowISO = new Date().toISOString();
+    const cutoffISO = new Date(Date.now() - DAY).toISOString();
 
-  if (now - last < DAY) {
-    const left = DAY - (now - last);
-    const h = Math.floor(left / HOUR);
-    const m = Math.floor((left % HOUR) / (60 * 1000));
-    await editOriginal(body, { content: `⏳ כבר לקחת היום. נסה שוב בעוד ${h} שעות ו-${m} דקות.` });
-    return { statusCode: 200, body: "" };  // ← עצור כאן
+    // עדכון אטומי: יזכה רק אם last_daily ריק או <= cutoff
+    const { data: updated, error } = await SUPABASE
+      .from("users")
+      .update({
+        balance: base + 50,
+        last_daily: nowISO,
+      })
+      .eq("id", userId)
+      .or(`last_daily.is.null,last_daily.lte.${cutoffISO}`)
+      .select("balance");
+
+    if (error) {
+      console.log("daily update error:", error);
+      await editOriginal(body, { content: "⚠️ תקלה זמנית. נסה שוב מאוחר יותר." });
+      return { statusCode: 200, body: "" };
+    }
+
+    if (!updated || updated.length === 0) {
+      // לא עודכן => כבר לקח ב־24 שעות. מחשבים זמן שנותר לפי הערך שקיים אצלך בטבלה
+      const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
+      const left = Math.max(0, DAY - (Date.now() - last));
+      const h = Math.floor(left / HOUR);
+      const m = Math.floor((left % HOUR) / (60 * 1000));
+      await editOriginal(body, { content: `⏳ כבר לקחת היום. נסה שוב בעוד ${h} שעות ו-${m} דקות.` });
+      return { statusCode: 200, body: "" };
+    }
+
+    const newBalance = updated[0].balance;
+    await editOriginal(body, { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${newBalance}**` });
+    return { statusCode: 200, body: "" };
+  } catch (e) {
+    console.log("daily unexpected error:", e);
+    await editOriginal(body, { content: "⚠️ תקלה זמנית. נסה שוב מאוחר יותר." });
+    return { statusCode: 200, body: "" };
   }
+}
+
 
   const balance = (u.balance ?? 100) + 50;
   await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
@@ -871,6 +905,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
