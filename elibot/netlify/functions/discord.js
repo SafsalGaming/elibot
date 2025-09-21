@@ -158,7 +158,7 @@ async function editChannelMessage(channelId, messageId, payload) {
 
 /* ========== ROULETTE HELPERS ========== */
 // במקום: const ROULETTE_BUST_CHANCE = 0.20;
-const ROULETTE_BASE_BUST = 0.05; // 5%
+const ROULETTE_BASE_BUST = 0.15; // 5%
 const rouletteBustChance = (round) => Math.min(ROULETTE_BASE_BUST * round, 1); 
 // round=1 => 5%, 2=>10%, ...
 
@@ -958,6 +958,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
