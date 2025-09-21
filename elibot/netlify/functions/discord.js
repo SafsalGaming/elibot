@@ -690,14 +690,16 @@ if (cmd === "top") {
 
    /* ----- roulette amount ----- */
 if (cmd === "roulette") {
+    await deferPublicInteraction(body);
+
   const amount = parseInt(opts.amount, 10);
   if (!Number.isInteger(amount) || amount <= 0) {
-    return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
+   await editOriginal(body,  { content: `❌ סכום הימור לא תקין.` } );
   }
 
   const u = await getUser(userId);
   if ((u.balance ?? 100) < amount) {
-    return json({ type: 4, data: { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance}.` } });
+    await editOriginal(body, { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance}.` } );
   }
 
   // מחייבים את המשתמש על ההימור
@@ -958,6 +960,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
