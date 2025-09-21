@@ -455,17 +455,16 @@ if (cmd === "lottery_updates_role") {
 
     /* ----- daily (+50 / 24h) ----- */
 if (cmd === "daily") {
-  // פומבי או אפמרלי לבחירתך:
-  await deferPublicInteraction(body); // או deferEphemeralInteraction(body)
+  await deferPublicInteraction(body); // או deferEphemeralInteraction(body) אם אתה רוצה פרטי
 
   try {
-    // מביאים מצב רק בשביל הודעה נוחה
+    // מצב נוכחי רק בשביל טקסט
     const u = await getUser(userId);
     const base = (u.balance ?? 100);
     const nowISO = new Date().toISOString();
     const cutoffISO = new Date(Date.now() - DAY).toISOString();
 
-    // עדכון אטומי: יזכה רק אם last_daily ריק או <= cutoff
+    // עדכון אטומי: יקרה רק אם last_daily ריק או לפני ה-cutoff
     const { data: updated, error } = await SUPABASE
       .from("users")
       .update({
@@ -483,7 +482,7 @@ if (cmd === "daily") {
     }
 
     if (!updated || updated.length === 0) {
-      // לא עודכן => כבר לקח ב־24 שעות. מחשבים זמן שנותר לפי הערך שקיים אצלך בטבלה
+      // כבר לקח ב-24 שעות — מחשבים זמן שנותר
       const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
       const left = Math.max(0, DAY - (Date.now() - last));
       const h = Math.floor(left / HOUR);
@@ -503,18 +502,6 @@ if (cmd === "daily") {
 }
 
 
-  const balance = (u.balance ?? 100) + 50;
-  await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
-  await editOriginal(body, { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${balance}**` });
-  return { statusCode: 200, body: "" };    // ← וגם כאן לסגור יפה
-}
-
-
-  // הצליח לעדכן — מגיע בונוס
-  const newBalance = updated[0].balance;
-  await editOriginal(body, { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${newBalance}**` });
-  return { statusCode: 200, body: "" };
-}
 
 
     /* ----- work (+10 / 1h) ----- */
@@ -905,6 +892,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
