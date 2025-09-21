@@ -598,22 +598,47 @@ if (cmd === "dice") {
 }
 
 
-    /* ----- give user amount ----- */
-    if (cmd === "give") {
-      const target = opts.user;
-      const amount = parseInt(opts.amount, 10);
-      if (!target || target === userId) return json({ type: 4, data: { content: `❌ משתמש לא תקין.` } });
-      if (!Number.isInteger(amount) || amount <= 0) return json({ type: 4, data: { content: `❌ סכום לא תקין.` } });
+ /* ----- give user amount ----- */
+if (cmd === "give") {
+  await deferPublicInteraction(body);
 
-      const u = await getUser(userId);
-      if (u.balance < amount) return json({ type: 4, data: { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance}.` } });
+  try {
+    const target = opts.user;
+    const amount = parseInt(opts.amount, 10);
 
-      const receiver = await getUser(target);
-      await setUser(userId, { balance: u.balance - amount });
-      await setUser(target,  { balance: (receiver.balance ?? 100) + amount });
-
-      return json({ type: 4, data: { content: `🤝 העברת **${amount}** ל־<@${target}>. היתרה שלך: **${u.balance - amount}**, שלו: **${(receiver.balance ?? 100) + amount}**` } });
+    if (!target || target === userId) {
+      await editOriginal(body, { content: `❌ משתמש לא תקין.` });
+      return { statusCode: 200, body: "" };
     }
+    if (!Number.isInteger(amount) || amount <= 0) {
+      await editOriginal(body, { content: `❌ סכום לא תקין.` });
+      return { statusCode: 200, body: "" };
+    }
+
+    const u = await getUser(userId);
+    const giverBal = u.balance ?? 100;
+    if (giverBal < amount) {
+      await editOriginal(body, { content: `❌ אין לך מספיק מטבעות. היתרה: ${giverBal}.` });
+      return { statusCode: 200, body: "" };
+    }
+
+    const receiver = await getUser(target);
+    const receiverBal = receiver.balance ?? 100;
+
+    // עדכון יתרות
+    await setUser(userId, { balance: giverBal - amount });
+    await setUser(target,  { balance: receiverBal + amount });
+
+    await editOriginal(body, {
+      content: `🤝 העברת **${amount}** ל־<@${target}>. היתרה שלך: **${giverBal - amount}**, שלו: **${receiverBal + amount}**`
+    });
+    return { statusCode: 200, body: "" };
+  } catch (e) {
+    console.log("give error:", e);
+    await editOriginal(body, { content: `⚠️ תקלה זמנית. נסה שוב מאוחר יותר.` });
+    return { statusCode: 200, body: "" };
+  }
+}
 
     /* ----- top ----- */
 if (cmd === "top") {
@@ -915,6 +940,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
