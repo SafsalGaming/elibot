@@ -446,7 +446,7 @@ if (cmd === "lottery_updates_role") {
 
 
 if (cmd === "balance") {
-  await deferEphemeralInteraction(body); // או public
+  await deferPublicInteraction(body); // או public
   const u = await getUser(userId);
   await editOriginal(body, { content: `💰 ${username}, היתרה שלך: **${u.balance}** מטבעות` });
   return { statusCode: 200, body: "" };
@@ -487,29 +487,49 @@ if (cmd === "daily") {
 }
 
     /* ----- dice amount (d6 vs bot) ----- */
-    if (cmd === "dice") {
-      const amount = parseInt(opts.amount, 10);
-      if (!Number.isInteger(amount) || amount <= 0) {
-        return json({ type: 4, data: { content: `❌ סכום הימור לא תקין.` } });
-      }
-      const { data } = await SUPABASE.from("users").select("balance").eq("id", userId).maybeSingle();
-      let balance = data?.balance ?? 100;
-      if (balance < amount) return json({ type: 4, data: { content: `${username}, אין לך מספיק מטבעות 🎲` } });
+/* ----- dice amount (d6 vs bot) ----- */
+if (cmd === "dice") {
+  await deferPublicInteraction(body);
 
-      const userRoll = Math.floor(Math.random() * 6) + 1;
-      const botRoll  = Math.floor(Math.random() * 6) + 1;
-      if (userRoll > botRoll) {
-        balance += amount;
-        await SUPABASE.from("users").upsert({ id: userId, balance });
-        return json({ type: 4, data: { content: `🎲 אתה: **${userRoll}**, אלי: **${botRoll}** — ניצחת! +${amount}. יתרה: **${balance}**` } });
-      } else if (userRoll < botRoll) {
-        balance -= amount;
-        await SUPABASE.from("users").upsert({ id: userId, balance });
-        return json({ type: 4, data: { content: `🎲 אתה: **${userRoll}**, אלי: **${botRoll}** — עוד ניצחון לאלי -${amount}. יתרה: **${balance}**` } });
-      } else {
-        return json({ type: 4, data: { content: `🎲 תיקו! אתה: **${userRoll}**, אלי: **${botRoll}** — אין שינוי (יתרה: ${balance})` } });
-      }
+  try {
+    const amount = parseInt(opts.amount, 10);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      await editOriginal(body, { content: `❌ סכום הימור לא תקין.` });
+      return { statusCode: 200, body: "" };
     }
+
+    // נוודא למשתמש רשומה ונביא יתרה
+    const u0 = await getUser(userId);
+    let balance = u0?.balance ?? 100;
+
+    if (balance < amount) {
+      await editOriginal(body, { content: `${username}, אין לך מספיק מטבעות 🎲 (יתרה: ${balance})` });
+      return { statusCode: 200, body: "" };
+    }
+
+    const userRoll = Math.floor(Math.random() * 6) + 1;
+    const botRoll  = Math.floor(Math.random() * 6) + 1;
+
+    if (userRoll > botRoll) {
+      balance += amount;
+      await setUser(userId, { balance });
+      await editOriginal(body, { content: `🎲 אתה: **${userRoll}**, אלי: **${botRoll}** — ניצחת! +${amount}. יתרה: **${balance}**` });
+    } else if (userRoll < botRoll) {
+      balance -= amount;
+      await setUser(userId, { balance });
+      await editOriginal(body, { content: `🎲 אתה: **${userRoll}**, אלי: **${botRoll}** — עוד ניצחון לאלי -${amount}. יתרה: **${balance}**` });
+    } else {
+      await editOriginal(body, { content: `🎲 תיקו! אתה: **${userRoll}**, אלי: **${botRoll}** — אין שינוי (יתרה: ${balance})` });
+    }
+
+    return { statusCode: 200, body: "" };
+  } catch (e) {
+    console.log("dice error:", e);
+    await editOriginal(body, { content: `⚠️ תקלה זמנית. נסה שוב מאוחר יותר.` });
+    return { statusCode: 200, body: "" };
+  }
+}
+
 
     /* ----- give user amount ----- */
     if (cmd === "give") {
@@ -828,6 +848,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
