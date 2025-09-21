@@ -455,7 +455,7 @@ if (cmd === "lottery_updates_role") {
 
     /* ----- daily (+50 / 24h) ----- */
     if (cmd === "daily") {
-      await deferEphemeralInteraction(body);
+      await deferPublicInteraction(body);
       const now = Date.now();
       const u = await getUser(userId);
       const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
@@ -467,7 +467,7 @@ if (cmd === "lottery_updates_role") {
       }
       const balance = (u.balance ?? 100) + 50;
       await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
-      return json({ type: 4, data: { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${balance}**` } });
+      await editOriginal(body,  { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${balance}**`});
     }
 
     /* ----- work (+10 / 1h) ----- */
@@ -858,6 +858,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
