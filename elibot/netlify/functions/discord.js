@@ -307,10 +307,14 @@ async function editChannelMessage(channelId, messageId, payload) {
   return r.json();
 }
 
-// סיכון קבוע 25% בכל סיבוב
-const ROULETTE_BUST_PCT = 0.25;
-const rouletteBustChance = (_round) => ROULETTE_BUST_PCT;
+// סיכוי למות ברולטה: מתחיל ב־20% וגדל ב־1% בכל סיבוב
+const ROULETTE_BASE_PCT = 0.20;   // סיבוב 1 = 20%
+const ROULETTE_INCR_PCT = 0.01;   // כל סיבוב +1%
 
+const rouletteBustChance = (round) => {
+  const p = ROULETTE_BASE_PCT + (Math.max(1, round) - 1) * ROULETTE_INCR_PCT;
+  return Math.min(Math.max(p, 0), 0.99); // בטיחות: לא לעבור 99%
+};
 
 
 // מכפיל אקספוננציאלי עד לסיבוב הנתון:
@@ -1234,6 +1238,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
