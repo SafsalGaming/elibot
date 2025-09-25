@@ -167,21 +167,49 @@ async function ensureUsernameOnce(userId, displayName) {
 }
 
 async function getUser(userId) {
-  const { data } = await SUPABASE.from("users").select("*").eq("id", userId).maybeSingle();
-if (!data) {
-  const row = {
-    id: userId,
-    balance: 100,
-    last_daily: null,
-    last_work: null,
-    // ↓↓↓ חדשים לוורדל
-    wordle_word: null,
-    wordle_date: null,
-    wordle_tries: 0
-  };
-  await SUPABASE.from("users").insert(row);
-  return row;
+  const { data } = await SUPABASE
+    .from("users")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (!data) {
+    const row = {
+      id: userId,
+      balance: 100,
+      last_daily: null,
+      last_work: null,
+      // ↓↓↓ שדות ה-Wordle
+      wordle_word: null,
+      wordle_date: null,   // YYYY-MM-DD
+      wordle_tries: 0
+    };
+    await SUPABASE.from("users").insert(row);
+    return row;
+  }
+
+  return data;
 }
+
+// מחזיר/מעדכן שדות למשתמש
+async function setUser(userId, patch) {
+  await SUPABASE.from("users").upsert({ id: userId, ...patch });
+}
+
+// מוודא שיש למשתמש מילת Wordle יומית (וניסיון מתאפס ביום חדש)
+async function ensureWordleForToday(userId) {
+  const today = ilTodayISO(); // YYYY-MM-DD לפי Asia/Jerusalem
+  const u = await getUser(userId);
+
+  if (u.wordle_date !== today || !u.wordle_word) {
+    const word = pickRandomWord();
+    await setUser(userId, { wordle_word: word, wordle_date: today, wordle_tries: 0 });
+    return { word, tries: 0, date: today };
+  }
+
+  return { word: u.wordle_word, tries: u.wordle_tries || 0, date: u.wordle_date };
+}
+
 
   async function ensureWordleForToday(userId) {
   const today = ilTodayISO();                 // YYYY-MM-DD לפי שעון ישראל
@@ -1104,6 +1132,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
