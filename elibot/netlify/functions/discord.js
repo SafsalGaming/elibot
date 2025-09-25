@@ -140,6 +140,7 @@ async function setUser(userId, patch) {
 // ========== WORDLE HELPERS ==========
 const WORDLE_MAX_ATTEMPTS = 6;
 const WORDLE_TZ = "Asia/Jerusalem";
+const WORDLE_WIN_REWARD = 250; // 💰 פרס על נצחון
 
 const ANSWERS = WORDLE_ANSWERS.map(w => w.toLowerCase());
 
@@ -612,13 +613,32 @@ if (!guessRaw) {
 const { emoji, marks } = scoreWordle(game.solution, guessRaw);
     const attempts = (game.attempts || 0) + 1;
 
-    // ניצחון
+// ניצחון
 if (guessRaw === game.solution.toLowerCase()) {
   const newHistory = [...(game.guesses || []), { word: guessRaw, emoji, marks }];
-  await SUPABASE.from("wordle_games")
+
+  // נסמן סיום רק אם עוד לא סומן (הגנה ממרוצים)
+  const { data: updatedRows, error: finishErr } = await SUPABASE.from("wordle_games")
     .update({ attempts, finished: true, guesses: newHistory, updated_at: new Date().toISOString() })
     .eq("user_id", userId)
-    .eq("date", todayYMD);
+    .eq("date", todayYMD)
+    .is("finished", false)
+    .select("id");
+
+  // אם לא עודכנה שורה (כבר סומן כסיום), נטען מחדש את המשחק ונציג בלי פרס
+  let awarded = false;
+  let contentSuffix = "";
+
+  if (!finishErr && updatedRows && updatedRows.length > 0) {
+    // מעניקים פרס על ניצחון
+    const u = await getUser(userId);
+    const newBal = (u.balance ?? 100) + WORDLE_WIN_REWARD;
+    await setUser(userId, { balance: newBal });
+    awarded = true;
+    contentSuffix =
+      `\n💰 קיבלת **+${WORDLE_WIN_REWARD}** מטבעות על הניצחון!` +
+      ` יתרה חדשה: **${newBal}**`;
+  }
 
   const left = WORDLE_MAX_ATTEMPTS - attempts;
   await editOriginal(body, {
@@ -629,10 +649,11 @@ if (guessRaw === game.solution.toLowerCase()) {
     }) + `
 
 🏆 🟩🟩🟩🟩🟩 ניצחת! המילה: **${game.solution.toUpperCase()}**.
-ניסיונות: **${attempts}/${WORDLE_MAX_ATTEMPTS}**`
+ניסיונות: **${attempts}/${WORDLE_MAX_ATTEMPTS}**` + contentSuffix
   });
   return { statusCode: 200, body: "" };
 }
+
 
 // לא ניצחת — עדכון היסטוריה והמשך
 const newHistory = [...(game.guesses || []), { word: guessRaw, emoji, marks }];
@@ -1213,6 +1234,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
