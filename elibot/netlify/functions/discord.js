@@ -156,9 +156,12 @@ async function editChannelMessage(channelId, messageId, payload) {
   return r.json();
 }
 
-// סיכון קבוע 25% בכל סיבוב
-const ROULETTE_BUST_PCT = 0.2;
-const rouletteBustChance = (_round) => ROULETTE_BUST_PCT;
+// סיכון התחלתי 20% + עולה ב־1% לכל סיבוב
+const ROULETTE_BASE_BUST = 0.20; // 20% בסיבוב 1
+const ROULETTE_STEP_BUST = 0.01; // +1% לכל סיבוב
+const rouletteBustChance = (round) =>
+  Math.min(ROULETTE_BASE_BUST + (round - 1) * ROULETTE_STEP_BUST, 1);
+
 
 
 
@@ -958,6 +961,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
