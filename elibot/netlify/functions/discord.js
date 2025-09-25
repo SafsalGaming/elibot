@@ -218,6 +218,73 @@ function scoreWordle(solution, guess) {
   const emoji = res.map(c => c === "g" ? "🟩" : c === "y" ? "🟨" : "⬜").join("");
   return { emoji, marks: res };
 }
+// מפענח אימוג'ים ל-g/y/b במקרה שאין marks שמורים
+function marksFromEmoji(emoji) {
+  return [...emoji].map(ch => ch === "🟩" ? "g" : ch === "🟨" ? "y" : "b");
+}
+
+// בונה את היסטוריית הניחושים בשורות כמו: WORD  🟩🟨⬜⬜⬜
+function formatHistoryLines(guesses) {
+  if (!guesses || !guesses.length) return "_עוד אין ניחושים היום_";
+  return guesses
+    .map(g => `${g.word.toUpperCase()}  ${g.emoji}`)
+    .join("\n");
+}
+
+// מסכם אותיות לפי ההיסטוריה:
+// 🟩 — כל אות שהופיעה ירוק לפחות פעם אחת
+// 🟨 — אות שהופיעה צהוב לפחות פעם אחת ועדיין לא ירוק אף פעם
+// ⬜ — אות שהופיעה רק אפור (לא הופיעה כצהוב/ירוק לעולם)
+function summarizeLetters(guesses) {
+  const green = new Set();
+  const yellow = new Set();
+  const gray = new Set();
+
+  for (const g of (guesses || [])) {
+    const marks = g.marks && Array.isArray(g.marks) ? g.marks : marksFromEmoji(g.emoji || "⬜⬜⬜⬜⬜");
+    const word = (g.word || "").toUpperCase();
+
+    for (let i = 0; i < 5; i++) {
+      const ch = word[i];
+      if (!ch) continue;
+      const m = marks[i];
+
+      if (m === "g") {
+        green.add(ch);
+        yellow.delete(ch);
+        gray.delete(ch);
+      } else if (m === "y") {
+        if (!green.has(ch)) yellow.add(ch);
+        gray.delete(ch);
+      } else { // "b"
+        if (!green.has(ch) && !yellow.has(ch)) gray.add(ch);
+      }
+    }
+  }
+
+  const fmt = set =>
+    [...set].sort((a,b)=>a.localeCompare(b)).join(", ");
+
+  const lines = [];
+  if (green.size)  lines.push(`🟩: ${fmt(green)}`);
+  if (yellow.size) lines.push(`🟨: ${fmt(yellow)}`);
+  if (gray.size)   lines.push(`⬜: ${fmt(gray)}`);
+
+  return lines.join("\n");
+}
+
+// מרנדר את מסך הסטטוס המלא (כמו /wordle) לשימוש גם אחרי כל ניחוש
+function renderWordleStatus({ dateHeb, attemptsLeft, guesses }) {
+  const history = formatHistoryLines(guesses);
+  const summary = summarizeLetters(guesses);
+  return `🧩 וורדל היומי • ${dateHeb}
+נשארו לך **${attemptsLeft}** ניסיונות להיום.
+נחש עם: \`/wordle word:<xxxxx>\`
+
+${history}
+
+${summary ? summary + "\n" : ""}`.trimEnd();
+}
 
 function btn(custom_id, label, style = 1, disabled = false) {
   return { type: 2, style, label, custom_id, disabled };
@@ -512,22 +579,19 @@ if (cmd === "wordle") {
     let game = await getOrCreateWordleGame(userId, todayYMD);
 
     // ללא פרמטר — מצב יומי
-    if (!guessRaw) {
-      const left = WORDLE_MAX_ATTEMPTS - (game.attempts || 0);
-      const history = (game.guesses || [])
-        .map(g => `${g.word.toUpperCase()}  ${g.emoji}`)
-        .join("\n") || "_עוד אין ניחושים היום_";
+// ללא פרמטר — מצב יומי
+if (!guessRaw) {
+  const left = WORDLE_MAX_ATTEMPTS - (game.attempts || 0);
+  await editOriginal(body, {
+    content: renderWordleStatus({
+      dateHeb: todayHeb,
+      attemptsLeft: left,
+      guesses: game.guesses || []
+    })
+  });
+  return { statusCode: 200, body: "" };
+}
 
-      await editOriginal(body, {
-        content:
-`🧩 וורדל היומי • ${todayHeb}
-נשארו לך **${left}** ניסיונות להיום.
-נחש עם: \`/wordle word:<xxxxx>\`
-
-${history}`
-      });
-      return { statusCode: 200, body: "" };
-    }
 
     // גמרת את הניסיונות/סימנת סיום
     if (game.finished || (game.attempts || 0) >= WORDLE_MAX_ATTEMPTS) {
@@ -545,48 +609,62 @@ ${history}`
       return { statusCode: 200, body: "" };
     }
 
-    const { emoji } = scoreWordle(game.solution, guessRaw);
+const { emoji, marks } = scoreWordle(game.solution, guessRaw);
     const attempts = (game.attempts || 0) + 1;
 
     // ניצחון
-    if (guessRaw === game.solution.toLowerCase()) {
-      const newHistory = [...(game.guesses || []), { word: guessRaw, emoji }];
-      await SUPABASE
-        .from("wordle_games")
-        .update({ attempts, finished: true, guesses: newHistory, updated_at: new Date().toISOString() })
-        .eq("user_id", userId)
-        .eq("date", todayYMD);
+if (guessRaw === game.solution.toLowerCase()) {
+  const newHistory = [...(game.guesses || []), { word: guessRaw, emoji, marks }];
+  await SUPABASE.from("wordle_games")
+    .update({ attempts, finished: true, guesses: newHistory, updated_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("date", todayYMD);
 
-      await editOriginal(body, {
-        content:
-`🏆 🟩🟩🟩🟩🟩 ניצחת! המילה: **${game.solution.toUpperCase()}**.
+  const left = WORDLE_MAX_ATTEMPTS - attempts;
+  await editOriginal(body, {
+    content: renderWordleStatus({
+      dateHeb: todayHeb,
+      attemptsLeft: left,
+      guesses: newHistory
+    }) + `
+
+🏆 🟩🟩🟩🟩🟩 ניצחת! המילה: **${game.solution.toUpperCase()}**.
 ניסיונות: **${attempts}/${WORDLE_MAX_ATTEMPTS}**`
-      });
-      return { statusCode: 200, body: "" };
-    }
+  });
+  return { statusCode: 200, body: "" };
+}
 
-    // לא ניצחת — עדכון היסטוריה והמשך
-    const newHistory = [...(game.guesses || []), { word: guessRaw, emoji }];
-    await SUPABASE
-      .from("wordle_games")
-      .update({ attempts, guesses: newHistory, updated_at: new Date().toISOString() })
-      .eq("user_id", userId)
-      .eq("date", todayYMD);
+// לא ניצחת — עדכון היסטוריה והמשך
+const newHistory = [...(game.guesses || []), { word: guessRaw, emoji, marks }];
+await SUPABASE.from("wordle_games")
+  .update({ attempts, guesses: newHistory, updated_at: new Date().toISOString() })
+  .eq("user_id", userId)
+  .eq("date", todayYMD);
 
-    if (attempts >= WORDLE_MAX_ATTEMPTS) {
-      await editOriginal(body, {
-        content:
-`${emoji}
+if (attempts >= WORDLE_MAX_ATTEMPTS) {
+  await editOriginal(body, {
+    content: renderWordleStatus({
+      dateHeb: todayHeb,
+      attemptsLeft: 0,
+      guesses: newHistory
+    }) + `
+
 ❌ זה היה הניסיון השישי. המילה הנכונה: **${game.solution.toUpperCase()}**.`
-      });
-    } else {
-      const left = WORDLE_MAX_ATTEMPTS - attempts;
-      await editOriginal(body, {
-        content:
-`${emoji}
+  });
+} else {
+  const left = WORDLE_MAX_ATTEMPTS - attempts;
+  await editOriginal(body, {
+    content: renderWordleStatus({
+      dateHeb: todayHeb,
+      attemptsLeft: left,
+      guesses: newHistory
+    }) + `
+
+${emoji}
 נסה שוב. נשארו **${left}** ניסיונות.`
-      });
-    }
+  });
+}
+
 
     return { statusCode: 200, body: "" };
   } catch (e) {
@@ -1137,6 +1215,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
