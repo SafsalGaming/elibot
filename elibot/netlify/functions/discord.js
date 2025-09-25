@@ -37,6 +37,10 @@ const BOT_HEADERS = {
   "User-Agent": "DiscordBot (functions,1.0)"
 };
 const APP_ID = process.env.DISCORD_APP_ID; // ודא שזה קיים בסביבה!
+// --- Bias settings (ניצחון שחקן) ---
+const COIN_USER_WIN_P = 0.55; // coinflip
+const DICE_USER_WIN_P = 0.5; // dice
+const DICE_TIE_P = 1/6;       // נשמור תיקו ~16.67% כמו טבעי
 
 const NOAUTH_HEADERS = {
   "Content-Type": "application/json",
@@ -818,14 +822,18 @@ if (cmd === "coinflip") {
       return { statusCode: 200, body: "" };
     }
 
-    const flip = Math.random() < 0.5 ? "heads" : "tails";
-    const won  = (flip === choice);
-    const balance = (u.balance ?? 100) + (won ? amount : -amount);
+// קובעים מראש האם המשתמש ניצח בהטלה הזו (55%)
+const won = Math.random() < COIN_USER_WIN_P;
+// מייצרים "תוצאת מטבע" עקבית עם התוצאה
+const flip = won ? choice : (choice === "heads" ? "tails" : "heads");
 
-    await setUser(userId, { balance });
-    await editOriginal(body, {
-      content: `🪙 יצא **${flip}** — ${won ? `זכית! +${amount}` : `הפסדת... -${amount}`} | יתרה: **${balance}**`
-    });
+const balance = (u.balance ?? 100) + (won ? amount : -amount);
+
+await setUser(userId, { balance });
+await editOriginal(body, {
+  content: `🪙 יצא **${flip}** — ${won ? `זכית! +${amount}` : `הפסדת... -${amount}`} | יתרה: **${balance}**`
+});
+
     return { statusCode: 200, body: "" };
   } catch (e) {
     console.log("coinflip error:", e);
@@ -889,8 +897,23 @@ if (cmd === "dice") {
       return { statusCode: 200, body: "" };
     }
 
-    const userRoll = Math.floor(Math.random() * 6) + 1;
-    const botRoll  = Math.floor(Math.random() * 6) + 1;
+
+let userRoll, botRoll;
+const r = Math.random();
+
+if (r < DICE_USER_WIN_P) {
+  // ניצחון למשתמש: בוחרים זוג עם user > bot
+  // בוחרים bot 1..5 ואז user בטווח (bot+1..6)
+  botRoll  = 1 + Math.floor(Math.random() * 5);
+  userRoll = botRoll + 1 + Math.floor(Math.random() * (6 - botRoll));
+} else if (r < DICE_USER_WIN_P + DICE_TIE_P) {
+  // תיקו: אותו מספר
+  userRoll = botRoll = 1 + Math.floor(Math.random() * 6);
+} else {
+  // הפסד למשתמש: user < bot
+  userRoll = 1 + Math.floor(Math.random() * 5);
+  botRoll  = userRoll + 1 + Math.floor(Math.random() * (6 - userRoll));
+}
 
     if (userRoll > botRoll) {
       balance += amount;
@@ -1260,6 +1283,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
