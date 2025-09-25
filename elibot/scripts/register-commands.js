@@ -74,6 +74,15 @@ const commands = [
       { name: "amount", description: "Bet amount for the fight", type: 4, required: true, min_value: 1 }
     ]
   },
+  {
+  name: "wordle",
+  description: "Daily Wordle game",
+  type: 1,
+  options: [
+    { name: "word", description: "Your 5-letter guess", type: 3, required: false, min_length: 5, max_length: 5 }
+  ]
+},
+
 
   {
     name: "lottery",
@@ -160,3 +169,4 @@ console.log("✅ Registered:", finalList.map(c => ({ id: c.id, name: c.name })))
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
+
