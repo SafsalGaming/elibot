@@ -4,7 +4,8 @@ publish = "."                           # אין אתר סטטי? נקודת ה�
 functions = "netlify/functions"         # יחסי ל-base (כלומר elibot/netlify/functions)
 command = "npm install --no-audit --no-fund && node scripts/register-commands.js"
 
-
+[build.environment]
+  NODE_VERSION = "18"
 
 
 [functions]
@@ -15,6 +16,7 @@ command = "npm install --no-audit --no-fund && node scripts/register-commands.js
 [[scheduled.functions]]
   path = "cron-lottery"
   schedule = "*/5 * * * *"
+
 
 
 
