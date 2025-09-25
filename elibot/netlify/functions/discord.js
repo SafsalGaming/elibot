@@ -36,6 +36,51 @@ const BOT_HEADERS = {
   "User-Agent": "DiscordBot (functions,1.0)"
 };
 const APP_ID = process.env.DISCORD_APP_ID; // ודא שזה קיים בסביבה!
+// ===== WORDLE (words + helpers) =====
+// רשימת מילים של 5 אותיות (שים פה כמה שיותר. דוגמה חלקית)
+const WORDLE_WORDS = [
+  "about","other","which","their","there","first","would","these","could","sound",
+  "after","thing","where","right","think","three","small","large","house","place",
+  "again","point","group","under","water","often","young","story","while","light",
+  "world","music","apple","share","times","great","plant","build","stand","learn",
+  "power","heart","north","south","black","white","green","brown","short","long",
+  "table","chair","glass","stone","paper","phone","cloud","sweet","salty","spice",
+  "truck","train","beach","river","mount","money","happy","sadly","angry","proud",
+  "sleep","dream","smile","laugh","drink","bread","cheese","pasta","pizza","sauce",
+  "quiet","noisy","early","later","start","final","human","robot","candy","honey",
+  "metal","solid","fluid","vapor","laser","gamma","radio","micro","macro","quant",
+  "delta","sigma","theta","omega","eagle","tiger","zebra","koala","panda","camel",
+  "crown","sword","guard","magic","fairy","giant","ghost","witch","flame","frost"
+];
+// אם יש לך רשימה ארוכה אמיתית – פשוט תדביק אותה במקום המערך הזה.
+const WORDLE_VALID = new Set(WORDLE_WORDS); // בדיקת חוקיות ניחוש
+
+// תאריך היום ב־Asia/Jerusalem בפורמט YYYY-MM-DD
+function ilTodayISO() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(new Date());
+}
+
+// בחר מילה חדשה רנדומלית
+function pickRandomWord() {
+  return WORDLE_WORDS[Math.floor(Math.random() * WORDLE_WORDS.length)];
+}
+
+// פידבק כמו וורדל, כולל טיפול בכפילויות
+function evaluateGuess(guess, solution) {
+  const n = solution.length;
+  const fb = Array(n).fill('⬜');
+  const counts = {};
+  for (let i = 0; i < n; i++) counts[solution[i]] = (counts[solution[i]] || 0) + 1;
+  for (let i = 0; i < n; i++) if (guess[i] === solution[i]) { fb[i] = '🟩'; counts[guess[i]]--; }
+  for (let i = 0; i < n; i++) {
+    if (fb[i] === '🟩') continue;
+    const c = guess[i];
+    if ((counts[c] || 0) > 0) { fb[i] = '🟨'; counts[c]--; }
+  }
+  return fb.join('');
+}
 
 const NOAUTH_HEADERS = {
   "Content-Type": "application/json",
@@ -123,17 +168,32 @@ async function ensureUsernameOnce(userId, displayName) {
 
 async function getUser(userId) {
   const { data } = await SUPABASE.from("users").select("*").eq("id", userId).maybeSingle();
-  if (!data) {
-    const row = { id: userId, balance: 100, last_daily: null, last_work: null };
-    await SUPABASE.from("users").insert(row);
-    return row;
-  }
-  return data;
+if (!data) {
+  const row = {
+    id: userId,
+    balance: 100,
+    last_daily: null,
+    last_work: null,
+    // ↓↓↓ חדשים לוורדל
+    wordle_word: null,
+    wordle_date: null,
+    wordle_tries: 0
+  };
+  await SUPABASE.from("users").insert(row);
+  return row;
 }
 
-async function setUser(userId, patch) {
-  await SUPABASE.from("users").upsert({ id: userId, ...patch });
+  async function ensureWordleForToday(userId) {
+  const today = ilTodayISO();                 // YYYY-MM-DD לפי שעון ישראל
+  const u = await getUser(userId);
+  if (u.wordle_date !== today || !u.wordle_word) {
+    const word = pickRandomWord();
+    await setUser(userId, { wordle_word: word, wordle_date: today, wordle_tries: 0 });
+    return { word, tries: 0, date: today };
+  }
+  return { word: u.wordle_word, tries: u.wordle_tries || 0, date: u.wordle_date };
 }
+
 
 /* ========== DISCORD HELPERS ========== */
 function btn(custom_id, label, style = 1, disabled = false) {
@@ -458,6 +518,89 @@ if (cmd === "lottery_updates_role") {
     });
     return { statusCode: 200, body: "" };
   }
+}
+
+    /* ----- WORDLE: פקודה אחת ----- */
+// /wordle [word?: string]
+if (cmd === "wordle") {
+  await deferPublicInteraction(body);
+
+  const guessRaw = (opts.word ?? "").toString().trim().toLowerCase();
+
+  // מאבטחים שיש מילה ליום (ואיפוס ניסיונות אם עבר יום)
+  const { word, tries, date } = await ensureWordleForToday(userId);
+
+  // אם לא סופק ניחוש — מציג סטטוס
+  if (!guessRaw) {
+    const triesLeft = Math.max(0, 6 - (tries || 0));
+    await editOriginal(body, {
+      embeds: [{
+        title: "🧠 WORDLE יומי (פר־משתמש)",
+        description:
+          `תאריך: **${date}** (Asia/Jerusalem)\n` +
+          `מילה של 5 אותיות באנגלית.\n` +
+          `נשארו לך **${triesLeft}** ניסיונות להיום.\n\n` +
+          `נחש עם: \`/wordle word:<xxxxx>\``,
+        color: 0x00b894
+      }]
+    });
+    return { statusCode: 200, body: "" };
+  }
+
+  // יש ניחוש — בודקים חוקיות
+  if (guessRaw.length !== 5 || !WORDLE_VALID.has(guessRaw)) {
+    await editOriginal(body, { content: "❌ מילה לא חוקית. צריך 5 אותיות מהרשימה." });
+    return { statusCode: 200, body: "" };
+  }
+
+  // נגמרו ניסיונות?
+  if ((tries || 0) >= 6) {
+    await editOriginal(body, { content: `💥 נגמרו לך הניסיונות להיום (${date}). נסה מחר.` });
+    return { statusCode: 200, body: "" };
+  }
+
+  // מחשבים פידבק
+  const feedback = evaluateGuess(guessRaw, word);
+  const won = feedback === "🟩🟩🟩🟩🟩";
+  const nextTries = (tries || 0) + 1;
+
+  await setUser(userId, { wordle_tries: nextTries });
+
+  if (won) {
+    await editOriginal(body, {
+      embeds: [{
+        title: "🏆 WORDLE — ניצחון!",
+        description: `פתרת ב־**${nextTries}** ניחושים.\n${feedback}\n\nתבוא מחר לעוד סיבוב 😉`,
+        color: 0x2ecc71,
+        footer: { text: `תאריך: ${date}` }
+      }]
+    });
+    return { statusCode: 200, body: "" };
+  }
+
+  if (nextTries >= 6) {
+    await editOriginal(body, {
+      embeds: [{
+        title: "💥 WORDLE — נגמרו הניסיונות",
+        description: `${feedback}\n\nהפתרון היה: **${word}**\nנסה שוב מחר.`,
+        color: 0xe74c3c,
+        footer: { text: `תאריך: ${date}` }
+      }]
+    });
+    return { statusCode: 200, body: "" };
+  }
+
+  // עוד יש ניסיונות
+  const left = 6 - nextTries;
+  await editOriginal(body, {
+    embeds: [{
+      title: "🧠 WORDLE",
+      description: `${feedback}\nנשארו לך **${left}** ניסיונות.`,
+      color: 0x00b894,
+      footer: { text: `תאריך: ${date}` }
+    }]
+  });
+  return { statusCode: 200, body: "" };
 }
 
 
@@ -961,6 +1104,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
