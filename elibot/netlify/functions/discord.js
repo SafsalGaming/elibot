@@ -3,6 +3,7 @@ import { verifyKey } from "discord-interactions";
 import { createClient } from "@supabase/supabase-js";
 import { fetch } from "undici";
 import { randomUUID } from "crypto";
+import { WORDLE_ANSWERS } from "./wordle-words.js";
 
 const json = (obj, status = 200) => ({
   statusCode: status,
@@ -136,6 +137,88 @@ async function setUser(userId, patch) {
 }
 
 /* ========== DISCORD HELPERS ========== */
+// ========== WORDLE HELPERS ==========
+const WORDLE_MAX_ATTEMPTS = 6;
+const WORDLE_TZ = "Asia/Jerusalem";
+
+const ANSWERS = WORDLE_ANSWERS.map(w => w.toLowerCase());
+
+// yyyy-mm-dd לפי אזור זמן ישראל
+function ymdInTZ(ts = Date.now(), tz = WORDLE_TZ) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(ts);
+  const y = parts.find(p => p.type === "year")?.value;
+  const m = parts.find(p => p.type === "month")?.value;
+  const d = parts.find(p => p.type === "day")?.value;
+  return `${y}-${m}-${d}`;
+}
+
+// להצגה dd.mm.yyyy
+function ddmmyyyyInTZ(ts = Date.now(), tz = WORDLE_TZ) {
+  const parts = new Intl.DateTimeFormat("he-IL", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(ts);
+  const y = parts.find(p => p.type === "year")?.value;
+  const m = parts.find(p => p.type === "month")?.value;
+  const d = parts.find(p => p.type === "day")?.value;
+  return `${d}.${m}.${y}`;
+}
+
+async function getOrCreateWordleGame(userId, ymd) {
+  const { data } = await SUPABASE
+    .from("wordle_games").select("*")
+    .eq("user_id", userId).eq("date", ymd).maybeSingle();
+
+  if (data) return data;
+
+  const solution = ANSWERS[Math.floor(Math.random() * ANSWERS.length)];
+  const row = {
+    user_id: userId, date: ymd, solution,
+    attempts: 0, finished: false, guesses: [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  await SUPABASE.from("wordle_games").insert(row);
+  return row;
+}
+
+// בלי רשימת allowed: כל מילה של 5 אותיות באנגלית תקפה
+function isValidGuess(guess) {
+  return typeof guess === "string" && /^[a-z]{5}$/i.test(guess);
+}
+
+// לוגיקת צביעה 🟩🟨⬜ כולל כפילויות
+function scoreWordle(solution, guess) {
+  solution = solution.toLowerCase();
+  guess = guess.toLowerCase();
+
+  const res = Array(5).fill("b");
+  const solArr = solution.split("");
+  const guessArr = guess.split("");
+
+  // ירוקים
+  for (let i = 0; i < 5; i++) {
+    if (guessArr[i] === solArr[i]) {
+      res[i] = "g";
+      solArr[i] = null;
+      guessArr[i] = null;
+    }
+  }
+  // צהובים
+  for (let i = 0; i < 5; i++) {
+    if (guessArr[i] == null) continue;
+    const idx = solArr.indexOf(guessArr[i]);
+    if (idx !== -1) {
+      res[i] = "y";
+      solArr[idx] = null;
+    }
+  }
+
+  const emoji = res.map(c => c === "g" ? "🟩" : c === "y" ? "🟨" : "⬜").join("");
+  return { emoji, marks: res };
+}
+
 function btn(custom_id, label, style = 1, disabled = false) {
   return { type: 2, style, label, custom_id, disabled };
 }
@@ -417,6 +500,102 @@ if (cid.startsWith("roulette:")) {
       return json({ type: 4, data: { content: `🎲 הימורים רק בחדר <#${ALLOWED_GAMBLING_CHANNEL}>` } });
     }
         /* ----- lottery_updates_role ----- */
+  /* ----- wordle [word?] ----- */
+if (cmd === "wordle") {
+  await deferPublicInteraction(body);
+
+  try {
+    const todayYMD = ymdInTZ();
+    const todayHeb = ddmmyyyyInTZ();
+    const guessRaw = (opts.word || "").toLowerCase().trim();
+
+    let game = await getOrCreateWordleGame(userId, todayYMD);
+
+    // ללא פרמטר — מצב יומי
+    if (!guessRaw) {
+      const left = WORDLE_MAX_ATTEMPTS - (game.attempts || 0);
+      const history = (game.guesses || [])
+        .map(g => `${g.word.toUpperCase()}  ${g.emoji}`)
+        .join("\n") || "_עוד אין ניחושים היום_";
+
+      await editOriginal(body, {
+        content:
+`🧩 וורדל היומי • ${todayHeb}
+נשארו לך **${left}** ניסיונות להיום.
+נחש עם: \`/wordle word:<xxxxx>\`
+
+${history}`
+      });
+      return { statusCode: 200, body: "" };
+    }
+
+    // גמרת את הניסיונות/סימנת סיום
+    if (game.finished || (game.attempts || 0) >= WORDLE_MAX_ATTEMPTS) {
+      await editOriginal(body, {
+        content:
+`❌ סיימת להיום. המילה היתה: **${game.solution.toUpperCase()}**.
+תחכה עד חצות לפי שעון ישראל למשחק חדש.`
+      });
+      return { statusCode: 200, body: "" };
+    }
+
+    // בדיקת ולידציה בסיסית — 5 אותיות באנגלית
+    if (!isValidGuess(guessRaw)) {
+      await editOriginal(body, { content: `❌ מילה לא חוקית. חייב 5 אותיות באנגלית.` });
+      return { statusCode: 200, body: "" };
+    }
+
+    const { emoji } = scoreWordle(game.solution, guessRaw);
+    const attempts = (game.attempts || 0) + 1;
+
+    // ניצחון
+    if (guessRaw === game.solution.toLowerCase()) {
+      const newHistory = [...(game.guesses || []), { word: guessRaw, emoji }];
+      await SUPABASE
+        .from("wordle_games")
+        .update({ attempts, finished: true, guesses: newHistory, updated_at: new Date().toISOString() })
+        .eq("user_id", userId)
+        .eq("date", todayYMD);
+
+      await editOriginal(body, {
+        content:
+`🏆 🟩🟩🟩🟩🟩 ניצחת! המילה: **${game.solution.toUpperCase()}**.
+ניסיונות: **${attempts}/${WORDLE_MAX_ATTEMPTS}**`
+      });
+      return { statusCode: 200, body: "" };
+    }
+
+    // לא ניצחת — עדכון היסטוריה והמשך
+    const newHistory = [...(game.guesses || []), { word: guessRaw, emoji }];
+    await SUPABASE
+      .from("wordle_games")
+      .update({ attempts, guesses: newHistory, updated_at: new Date().toISOString() })
+      .eq("user_id", userId)
+      .eq("date", todayYMD);
+
+    if (attempts >= WORDLE_MAX_ATTEMPTS) {
+      await editOriginal(body, {
+        content:
+`${emoji}
+❌ זה היה הניסיון השישי. המילה הנכונה: **${game.solution.toUpperCase()}**.`
+      });
+    } else {
+      const left = WORDLE_MAX_ATTEMPTS - attempts;
+      await editOriginal(body, {
+        content:
+`${emoji}
+נסה שוב. נשארו **${left}** ניסיונות.`
+      });
+    }
+
+    return { statusCode: 200, body: "" };
+  } catch (e) {
+    console.log("wordle error:", e?.message || e);
+    await editOriginal(body, { content: `⚠️ תקלה זמנית. נסה שוב מאוחר יותר.` });
+    return { statusCode: 200, body: "" };
+  }
+}
+
 /* ----- lottery_updates_role ----- */
 /* ----- lottery_updates_role ----- */
 if (cmd === "lottery_updates_role") {
@@ -958,6 +1137,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
