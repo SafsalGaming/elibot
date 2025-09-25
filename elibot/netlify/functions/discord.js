@@ -275,17 +275,26 @@ function summarizeLetters(guesses) {
 }
 
 // מרנדר את מסך הסטטוס המלא (כמו /wordle) לשימוש גם אחרי כל ניחוש
-function renderWordleStatus({ dateHeb, attemptsLeft, guesses }) {
-  const history = formatHistoryLines(guesses);
-  const summary = summarizeLetters(guesses);
-  return `🧩 וורדל היומי • ${dateHeb}
-נשארו לך **${attemptsLeft}** ניסיונות להיום.
-נחש עם: \`/wordle word:<xxxxx>\`
-
-${history}
-
-${summary ? summary + "\n" : ""}`.trimEnd();
+// מרנדר סטטוס; כש-finished=true לא מציגים ניסיונות/הנחיה/סיכום אותיות
+function renderWordleStatus({ dateHeb, attemptsLeft, guesses, finished = false }) {
+  const parts = [];
+  parts.push(`🧩 וורדל היומי • ${dateHeb}`);
+  if (!finished) {
+    parts.push(`נשארו לך **${attemptsLeft}** ניסיונות להיום.`);
+    parts.push(`נחש עם: \`/wordle word:<xxxxx>\``);
+  }
+  parts.push(""); // רווח
+  parts.push(formatHistoryLines(guesses));
+  if (!finished) {
+    const summary = summarizeLetters(guesses);
+    if (summary) {
+      parts.push("");
+      parts.push(summary);
+    }
+  }
+  return parts.join("\n").trimEnd();
 }
+
 
 function btn(custom_id, label, style = 1, disabled = false) {
   return { type: 2, style, label, custom_id, disabled };
@@ -587,15 +596,26 @@ if (cmd === "wordle") {
 // ללא פרמטר — מצב יומי
 if (!guessRaw) {
   const left = WORDLE_MAX_ATTEMPTS - (game.attempts || 0);
-  await editOriginal(body, {
-    content: renderWordleStatus({
-      dateHeb: todayHeb,
-      attemptsLeft: left,
-      guesses: game.guesses || []
-    })
+  const finished = !!game.finished;
+
+  let content = renderWordleStatus({
+    dateHeb: todayHeb,
+    attemptsLeft: left,
+    guesses: game.guesses || [],
+    finished
   });
+
+  if (finished) {
+    content += `
+
+🏆 סיימת את הוורדל להיום!
+המילה: **${game.solution.toUpperCase()}**.`;
+  }
+
+  await editOriginal(body, { content });
   return { statusCode: 200, body: "" };
 }
+
 
 
     // גמרת את הניסיונות/סימנת סיום
@@ -646,15 +666,17 @@ if (guessRaw === game.solution.toLowerCase()) {
 
   const left = WORDLE_MAX_ATTEMPTS - attempts;
   await editOriginal(body, {
-    content: renderWordleStatus({
-      dateHeb: todayHeb,
-      attemptsLeft: left,
-      guesses: newHistory
-    }) + `
+  content: renderWordleStatus({
+    dateHeb: todayHeb,
+    attemptsLeft: 0,         // לא יוצג כשfinished=true
+    guesses: newHistory,
+    finished: true
+  }) + `
 
 🏆 🟩🟩🟩🟩🟩 ניצחת! המילה: **${game.solution.toUpperCase()}**.
 ניסיונות: **${attempts}/${WORDLE_MAX_ATTEMPTS}**` + contentSuffix
-  });
+});
+
   return { statusCode: 200, body: "" };
 }
 
@@ -1238,6 +1260,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
