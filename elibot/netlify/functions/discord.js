@@ -659,8 +659,6 @@ if (attempts >= WORDLE_MAX_ATTEMPTS) {
       attemptsLeft: left,
       guesses: newHistory
     }) + `
-
-${emoji}
 נסה שוב. נשארו **${left}** ניסיונות.`
   });
 }
@@ -1215,6 +1213,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
