@@ -2,7 +2,7 @@
 base = "elibot"                         # כאן יושב package.json והסקריפט
 publish = "."                           # אין אתר סטטי? נקודת הבסיס קיימת תמיד
 functions = "netlify/functions"         # יחסי ל-base (כלומר elibot/netlify/functions)
-command = "npm install --no-audit --no-fund && node scripts/register-commands.js"
+command = "npm install --no-audit --no-fund && node scripts/register-commands.mjs"
 
 [build.environment]
   NODE_VERSION = "18"
@@ -16,6 +16,7 @@ command = "npm install --no-audit --no-fund && node scripts/register-commands.js
 [[scheduled.functions]]
   path = "cron-lottery"
   schedule = "*/5 * * * *"
+
 
 
 
