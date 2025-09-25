@@ -1,8 +1,8 @@
 // netlify/functions/discord.js
-import { verifyKey } from "discord-interactions";
-import { createClient } from "@supabase/supabase-js";
-import { fetch } from "undici";
-import { randomUUID } from "crypto";
+const { verifyKey } = require("discord-interactions");
+const { createClient } = require("@supabase/supabase-js");
+const { fetch } = require("undici");
+const { randomUUID } = require("node:crypto");
 
 const json = (obj, status = 200) => ({
   statusCode: status,
@@ -293,8 +293,8 @@ async function editOrPostLotteryMessage(lot, payload) {
   }
 }
 
-/* ========== HANDLER ========== */
-export async function handler(event) {
+/* ========== module.exports.handler = async (event, context) => { ========== */
+module.exports.handler = async (event, context) => {
   if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
   const sig = event.headers["x-signature-ed25519"];
@@ -1104,6 +1104,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
