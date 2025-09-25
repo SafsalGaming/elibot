@@ -157,7 +157,7 @@ async function editChannelMessage(channelId, messageId, payload) {
 }
 
 // סיכון קבוע 25% בכל סיבוב
-const ROULETTE_BUST_PCT = 0.25;
+const ROULETTE_BUST_PCT = 0.2;
 const rouletteBustChance = (_round) => ROULETTE_BUST_PCT;
 
 
@@ -958,6 +958,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
