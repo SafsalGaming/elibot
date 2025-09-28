@@ -227,14 +227,37 @@ function scoreWordle(solution, guess) {
 function marksFromEmoji(emoji) {
   return [...emoji].map(ch => ch === "🟩" ? "g" : ch === "🟨" ? "y" : "b");
 }
+// ממיר אותיות A-Z לאימוג'י דגלים אזוריים: 🇦…🇿
+function wordToRegionalIndicators(word = "") {
+  const A = "A".charCodeAt(0);
+  return (word.toUpperCase().slice(0, 5).split("").map(ch => {
+    const code = ch.charCodeAt(0);
+    if (code >= A && code <= A + 25) {
+      // Regional Indicator Symbol Letter A starts at 0x1F1E6
+      return String.fromCodePoint(0x1F1E6 + (code - A));
+    }
+    // fallback: אם תו לא A-Z נחזיר את התו עצמו
+    return ch;
+  })).join(" ");
+}
+
+// מוסיף רווחים בין האימוג'ים של הצבעים (🟩 🟨 ⬜)
+function spacedEmoji(emojiStr = "⬜⬜⬜⬜⬜") {
+  return [...emojiStr].join(" ");
+}
 
 // בונה את היסטוריית הניחושים בשורות כמו: WORD  🟩🟨⬜⬜⬜
 function formatHistoryLines(guesses) {
   if (!guesses || !guesses.length) return "_עוד אין ניחושים היום_";
   return guesses
-    .map(g => `${g.word.toUpperCase()}  ${g.emoji}`)
-    .join("\n");
+    .map(g => {
+      const lettersRow = wordToRegionalIndicators(g.word || "");
+      const colorsRow  = spacedEmoji(g.emoji || "⬜⬜⬜⬜⬜");
+      return `${lettersRow}\n${colorsRow}`;
+    })
+    .join("\n\n"); // רווח שורה בין ניסיונות
 }
+
 
 // מסכם אותיות לפי ההיסטוריה:
 // 🟩 — כל אות שהופיעה ירוק לפחות פעם אחת
@@ -1283,6 +1306,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
