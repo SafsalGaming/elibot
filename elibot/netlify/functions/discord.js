@@ -878,23 +878,22 @@ if (cmd === "daily") {
   await deferPublicInteraction(body);
 
   try {
-    const now = Date.now();
+    const today = ymdInTZ(Date.now(), "Asia/Jerusalem"); // YYYY-MM-DD לפי ישראל
     const u = await getUser(userId);
-    const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
 
-    if (now - last < DAY) {
-      const left = DAY - (now - last);
-      const h = Math.floor(left / HOUR);
-      const m = Math.floor((left % HOUR) / (60 * 1000));
-      await editOriginal(body, { content: `⏳ כבר לקחת היום. נסה שוב בעוד ${h} שעות ו־${m} דקות.` });
+    // אם המשתמש כבר לקח היום
+    if (u.last_daily === today) {
+      await editOriginal(body, { content: `⏳ כבר לקחת היום. תחזור מחר.` });
       return { statusCode: 200, body: "" };
     }
 
     const before = u.balance ?? 100;
-    const reward = Math.max(50, Math.floor(before * 0.10));
+    const reward = Math.max(50, Math.floor(before * 0.10)); // 10% או 50
     const balance = before + reward;
 
-    await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
+    // נשמור last_daily כתאריך (string)
+    await setUser(userId, { balance, last_daily: today });
+
     await editOriginal(body, { content: `🎁 קיבלת **${reward}** מטבעות! יתרה חדשה: **${balance}**` });
     return { statusCode: 200, body: "" };
   } catch (e) {
@@ -1316,6 +1315,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
