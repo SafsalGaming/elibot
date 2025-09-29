@@ -878,7 +878,7 @@ const balance = (u.balance ?? 100) + (won ? amount : -amount);
 
 await setUser(userId, { balance });
 await editOriginal(body, {
-  content: `🪙 יצא **${flip}** — ${won ? `זכית! +${amount}` : `הפסדת... -${amount}`} | יתרה: **${balance}**`
+  content: `:EliCoin: יצא **${flip}** — ${won ? `זכית! +${amount}` : `הפסדת... -${amount}`} | יתרה: **${balance}**`
 });
 
     return { statusCode: 200, body: "" };
@@ -1057,7 +1057,7 @@ if (cmd === "top") {
       return { statusCode: 200, body: "" };
     }
 
-    const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${u.balance} 🪙`);
+    const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${u.balance} :EliCoin:`);
 
     await editOriginal(body, {
       embeds: [
@@ -1351,6 +1351,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
