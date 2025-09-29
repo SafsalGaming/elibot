@@ -15,6 +15,7 @@ const json = (obj, status = 200) => ({
 
 /* ========== CONFIG ========== */
 const SUPABASE = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+const eliCoin = '<:EliCoin:1422316802188509268>'; // שם האימוג'י וה־ID האמיתי
 
 // ערוצי יעד
 const ALLOWED_GAMBLING_CHANNEL = "1418196736958005361"; // הימורים (roulette / fight / coinflip / dice / daily / work)
@@ -878,7 +879,7 @@ const balance = (u.balance ?? 100) + (won ? amount : -amount);
 
 await setUser(userId, { balance });
 await editOriginal(body, {
-  content: `:EliCoin: יצא **${flip}** — ${won ? `זכית! +${amount}` : `הפסדת... -${amount}`} | יתרה: **${balance}**`
+  content: `🪙 יצא **${flip}** — ${won ? `זכית! +${amount}` : `הפסדת... -${amount}`} | יתרה: **${balance}**`
 });
 
     return { statusCode: 200, body: "" };
@@ -1057,7 +1058,7 @@ if (cmd === "top") {
       return { statusCode: 200, body: "" };
     }
 
-    const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${u.balance} :EliCoin:`);
+    const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${u.balance} ${eliCoin}`);
 
     await editOriginal(body, {
       embeds: [
@@ -1351,6 +1352,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
