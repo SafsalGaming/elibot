@@ -77,7 +77,7 @@ const commands = [
   },
 {
   name: "wordle",
-  description: "Daily Wordle game. Win: higher of 150 or 30% of your balance",
+  description: "Daily Wordle game. Win: higher of 100 or 20% of your balance",
   type: 1,
   options: [
     { name: "word", description: "Your 5-letter guess", type: 3, required: false, min_length: 5, max_length: 5 }
@@ -170,5 +170,6 @@ console.log("✅ Registered:", finalList.map(c => ({ id: c.id, name: c.name })))
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
+
 
 
