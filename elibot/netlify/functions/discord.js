@@ -684,7 +684,7 @@ if (guessRaw === game.solution.toLowerCase()) {
     // מעניקים פרס על ניצחון: הגבוה מבין 150 או 30% מהיתרה הנוכחית
     const u = await getUser(userId);
     const before = u.balance ?? 100;
-    const reward = Math.max(150, Math.floor(before * 0.30));
+    const reward = Math.max(100, Math.floor(before * 0.20));
     const newBal = before + reward;
     await setUser(userId, { balance: newBal });
     awarded = true;
@@ -1316,6 +1316,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
