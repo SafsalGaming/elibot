@@ -5,6 +5,8 @@ import { fetch } from "undici";
 import { randomUUID } from "crypto";
 import { WORDLE_ANSWERS } from "./wordle-words.js";
 
+// כל התהליך עובד לפי שעון ישראל (גם פרסינג של Date בלי timezone)
+process.env.TZ = "Asia/Jerusalem";
 const json = (obj, status = 200) => ({
   statusCode: status,
   headers: { "Content-Type": "application/json" },
@@ -167,6 +169,17 @@ function ddmmyyyyInTZ(ts = Date.now(), tz = WORDLE_TZ) {
   const d = parts.find(p => p.type === "day")?.value;
   return `${d}.${m}.${y}`;
 }
+// מחזיר "YYYY-MM-DDTHH:mm:ss" לפי Asia/Jerusalem (ללא Z/אופסט)
+function ymdhmsInTZ(ts = Date.now(), tz = WORDLE_TZ) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  }).formatToParts(ts);
+  const get = (t) => parts.find(p => p.type === t)?.value || "00";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}`;
+}
 
 async function getOrCreateWordleGame(userId, ymd) {
   const { data } = await SUPABASE
@@ -176,12 +189,13 @@ async function getOrCreateWordleGame(userId, ymd) {
   if (data) return data;
 
   const solution = ANSWERS[Math.floor(Math.random() * ANSWERS.length)];
-  const row = {
-    user_id: userId, date: ymd, solution,
-    attempts: 0, finished: false, guesses: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
+const row = {
+  user_id: userId, date: ymd, solution,
+  attempts: 0, finished: false, guesses: [],
+  created_at: ymdhmsInTZ(),   // היה new Date().toISOString()
+  updated_at: ymdhmsInTZ(),
+};
+
   await SUPABASE.from("wordle_games").insert(row);
   return row;
 }
@@ -376,7 +390,7 @@ const rouletteCompoundedMultiplier = (round) => {
 // תאריך/שעה בפורמט ישראלי עם פסיק בין תאריך לשעה: DD/MM/YY, HH:MM
 function fmtIL(dt) {
   return new Intl.DateTimeFormat("he-IL", {
-    timeZone: "Asia/Jerusalem",
+    timeZone: WORDLE_TZ,
     year: "2-digit",
     month: "2-digit",
     day: "2-digit",
@@ -670,7 +684,10 @@ if (guessRaw === game.solution.toLowerCase()) {
 
   // נסמן סיום רק אם עוד לא סומן (הגנה ממרוצים)
   const { data: updatedRows, error: finishErr } = await SUPABASE.from("wordle_games")
-    .update({ attempts, finished: true, guesses: newHistory, updated_at: new Date().toISOString() })
+.update({
+  attempts, finished: true, guesses: newHistory,
+  updated_at: ymdhmsInTZ()
+})
     .eq("user_id", userId)
     .eq("date", todayYMD)
     .is("finished", false)
@@ -711,9 +728,10 @@ await editOriginal(body, wordleEmbed(todayHeb, description));
 // לא ניצחת — עדכון היסטוריה והמשך
 const newHistory = [...(game.guesses || []), { word: guessRaw, emoji, marks }];
 await SUPABASE.from("wordle_games")
-  .update({ attempts, guesses: newHistory, updated_at: new Date().toISOString() })
+  .update({ attempts, guesses: newHistory, updated_at: ymdhmsInTZ() })
   .eq("user_id", userId)
   .eq("date", todayYMD);
+
 
 if (attempts >= WORDLE_MAX_ATTEMPTS) {
   // הפסד — מציגים את המילה
@@ -800,6 +818,7 @@ if (cmd === "work") {
   await deferPublicInteraction(body);
 
   try {
+    
     const now = Date.now();
     const u = await getUser(userId);
     const last = u.last_work ? new Date(u.last_work).getTime() : 0;
@@ -816,7 +835,7 @@ if (cmd === "work") {
     const reward = Math.max(10, Math.floor(before * 0.02));
     const balance = before + reward;
 
-    await setUser(userId, { balance, last_work: new Date(now).toISOString() });
+await setUser(userId, { balance, last_work: ymdhmsInTZ(now, WORDLE_TZ) });
     await editOriginal(body, { content: `👷 קיבלת **${reward}** מטבעות על עבודה. יתרה: **${balance}**` });
     return { statusCode: 200, body: "" };
   } catch (e) {
@@ -878,21 +897,37 @@ if (cmd === "daily") {
   await deferPublicInteraction(body);
 
   try {
-    const today = ymdInTZ(Date.now(), "Asia/Jerusalem"); // YYYY-MM-DD לפי ישראל
+    const now = Date.now();
+    const today = ymdInTZ(now, WORDLE_TZ); // YYYY-MM-DD לפי שעון ישראל
     const u = await getUser(userId);
 
-    // אם המשתמש כבר לקח היום
-    if (u.last_daily === today) {
+    // נחלץ YMD של הפעם הקודמת (תומך גם בתאריך-טקסט וגם ב-ISO/timestamp)
+    let lastYMD = null;
+    if (u.last_daily) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(u.last_daily)) {
+        // נשמר כתאריך-טקסט (YYYY-MM-DD)
+        lastYMD = u.last_daily;
+      } else {
+        // נשמר בעבר כ-timestamp/ISO — נמיר ל-YMD לפי ישראל
+        const t = new Date(u.last_daily).getTime();
+        if (!Number.isNaN(t)) lastYMD = ymdInTZ(t, WORDLE_TZ);
+      }
+    }
+
+    // אם כבר נאסף היום — נחסום
+    if (lastYMD === today) {
       await editOriginal(body, { content: `⏳ כבר לקחת היום. תחזור מחר.` });
       return { statusCode: 200, body: "" };
     }
 
+    // תגמול: הגבוה מבין 50 או 10% מהיתרה
     const before = u.balance ?? 100;
-    const reward = Math.max(50, Math.floor(before * 0.10)); // 10% או 50
+    const reward = Math.max(50, Math.floor(before * 0.10));
     const balance = before + reward;
 
-    // נשמור last_daily כתאריך (string)
-    await setUser(userId, { balance, last_daily: today });
+    // נשמור timestamp (וגם אם העמודה היא טקסט/טיימסטמפ זה יעבוד; ההשוואה תמיד נעשית לפי YMD)
+// היה: await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
+await setUser(userId, { balance, last_daily: ymdInTZ(now, WORDLE_TZ) }); // למשל "2025-02-03"
 
     await editOriginal(body, { content: `🎁 קיבלת **${reward}** מטבעות! יתרה חדשה: **${balance}**` });
     return { statusCode: 200, body: "" };
@@ -1165,7 +1200,7 @@ await deferPublicInteraction(body);
           await SUPABASE.from("lotteries").update({
             status: "closed",
             is_open: false,
-            closed_at: new Date().toISOString()
+closed_at: ymdhmsInTZ()
           }).eq("id", open.id);
         }
 
@@ -1189,16 +1224,17 @@ return { statusCode: 200, body: "" };
 
         if (lot) {
           // ודא ש-close_at = created_at + 24h
-          const targetClose = new Date(new Date(lot.created_at).getTime() + 24*60*60*1000).toISOString();
+const targetClose = ymdhmsInTZ(new Date(lot.created_at).getTime() + 24*60*60*1000, WORDLE_TZ);
           if (!lot.close_at || Math.abs(new Date(lot.close_at).getTime() - new Date(targetClose).getTime()) > 2000) {
             await SUPABASE.from("lotteries").update({ close_at: targetClose }).eq("id", lot.id);
             lot.close_at = targetClose;
           }
         } else {
           // אין הגרלה פתוחה — יוצרים חדשה בהתאם לסכימה עם NOT NULL
-          const now = new Date();
-          const createdAtISO = now.toISOString();
-          const closeAtISO   = new Date(now.getTime() + 24*60*60*1000).toISOString();
+          const nowMs = Date.now();
+const createdAtIL = ymdhmsInTZ(nowMs, WORDLE_TZ);
+const closeAtIL   = ymdhmsInTZ(nowMs + 24*60*60*1000, WORDLE_TZ);
+
 
           // מספר רץ
           const { data: lastNumRow } = await SUPABASE
@@ -1213,9 +1249,9 @@ return { statusCode: 200, body: "" };
           const insertRow = {
             id: newId,
             channel_id: LOTTERY_CHANNEL_ID,
-            created_at: createdAtISO,
+created_at: createdAtIL,
             closed_at: null,
-            close_at: closeAtISO,
+close_at: closeAtIL,
             total: 0,
             status: "open",
             number: nextNumber,
@@ -1261,7 +1297,7 @@ return { statusCode: 200, body: "" };
             .eq("id", existing.id);
         } else {
           await SUPABASE.from("lottery_entries")
-            .insert({ id: randomUUID(), lottery_id: lot.id, user_id: userId, amount, inserted_at: new Date().toISOString() });
+            .insert({ id: randomUUID(), lottery_id: lot.id, user_id: userId, amount, inserted_at: ymdhmsInTZ() });
         }
 
         // 7) עדכון הודעת הלוטו בערוץ הייעודי
@@ -1315,6 +1351,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
