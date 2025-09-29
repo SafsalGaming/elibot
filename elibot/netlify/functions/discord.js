@@ -409,7 +409,7 @@ function lotteryOpenEmbed(number, startAtISO, closeAtISO, total, lines) {
       description:
         `${fmtIL(startAtISO)}\n` +
         `─────────────────────────────\n` +
-        `💰 **סכום זכייה:** ${total} מטבעות\n` +
+        `💰 **סכום זכייה:** ${total} בוטיאלים\n` +
         `─────────────────────────────\n` +
         `🎲 **סיכויי זכייה:**\n` +
         (lines.length ? lines.join("\n") : "_עדיין אין משתתפים נוספים_") +
@@ -427,7 +427,7 @@ function lotteryWinnerEmbed(number, winnerId, total) {
       title: `**🏆 הזוכה בהגרלה #${number} הוא: **`,
       description:
         `─────────────────────\n <@${winnerId}> 🎉\n` +
-        `─────────────────────\n**💰 פרס:** ${total} מטבעות`,
+        `─────────────────────\n**💰 פרס:** ${total} בוטיאלים`,
       color: 0xFF9900
     }]
   };
@@ -568,10 +568,10 @@ if (cid.startsWith("roulette:")) {
       const a = await getUser(creatorId);
       const b = await getUser(userId);
       if ((a.balance ?? 100) < amount) {
-        return json({ type: 4, data: { flags: 64, content: `❌ <@${creatorId}> אין מספיק מטבעות כדי לקיים את הקרב כרגע.` } });
+        return json({ type: 4, data: { flags: 64, content: `❌ <@${creatorId}> אין מספיק בוטיאלים כדי לקיים את הקרב כרגע.` } });
       }
       if ((b.balance ?? 100) < amount) {
-        return json({ type: 4, data: { flags: 64, content: `❌ אין לך מספיק מטבעות להצטרפות (נדרש ${amount}).` } });
+        return json({ type: 4, data: { flags: 64, content: `❌ אין לך מספיק בוטיאלים להצטרפות (נדרש ${amount}).` } });
       }
 
       await setUser(creatorId, { balance: (a.balance ?? 100) - amount });
@@ -587,7 +587,7 @@ if (cid.startsWith("roulette:")) {
         data: {
           content:
             `🥊 קרב על **${amount}**! המשתתפים: <@${creatorId}> מול <@${userId}>.\n` +
-            `🏆 הזוכה: <@${winner}> וקיבל **${prize}** מטבעות.`,
+            `🏆 הזוכה: <@${winner}> וקיבל **${prize}** בוטיאלים.`,
           components: []
         }
       });
@@ -706,7 +706,7 @@ if (guessRaw === game.solution.toLowerCase()) {
     await setUser(userId, { balance: newBal });
     awarded = true;
     contentSuffix =
-      `\n💰 קיבלת **+${reward}** מטבעות על הניצחון!` +
+      `\n💰 קיבלת **+${reward}** בוטיאלים על הניצחון!` +
       ` יתרה חדשה: **${newBal}**`;
   }
 
@@ -808,7 +808,7 @@ if (cmd === "lottery_updates_role") {
 if (cmd === "balance") {
   await deferPublicInteraction(body); // או public
   const u = await getUser(userId);
-  await editOriginal(body, { content: `💰 ${username}, היתרה שלך: **${u.balance}** מטבעות` });
+  await editOriginal(body, { content: `💰 ${username}, היתרה שלך: **${u.balance}** בוטיאלים` });
   return { statusCode: 200, body: "" };
 }
 
@@ -836,7 +836,7 @@ if (cmd === "work") {
     const balance = before + reward;
 
 await setUser(userId, { balance, last_work: ymdhmsInTZ(now, WORDLE_TZ) });
-    await editOriginal(body, { content: `👷 קיבלת **${reward}** מטבעות על עבודה. יתרה: **${balance}**` });
+    await editOriginal(body, { content: `👷 קיבלת **${reward}** בוטיאלים על עבודה. יתרה: **${balance}**` });
     return { statusCode: 200, body: "" };
   } catch (e) {
     console.log("work error:", e);
@@ -865,7 +865,7 @@ if (cmd === "coinflip") {
 
     const u = await getUser(userId);
     if (amount > (u.balance ?? 100)) {
-      await editOriginal(body, { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance ?? 100}.` });
+      await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים. היתרה: ${u.balance ?? 100}.` });
       return { statusCode: 200, body: "" };
     }
 
@@ -929,7 +929,7 @@ if (cmd === "daily") {
 // היה: await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
 await setUser(userId, { balance, last_daily: ymdInTZ(now, WORDLE_TZ) }); // למשל "2025-02-03"
 
-    await editOriginal(body, { content: `🎁 קיבלת **${reward}** מטבעות! יתרה חדשה: **${balance}**` });
+    await editOriginal(body, { content: `🎁 קיבלת **${reward}** בוטיאלים! יתרה חדשה: **${balance}**` });
     return { statusCode: 200, body: "" };
   } catch (e) {
     console.log("daily error:", e);
@@ -956,7 +956,7 @@ if (cmd === "dice") {
     let balance = u0?.balance ?? 100;
 
     if (balance < amount) {
-      await editOriginal(body, { content: `${username}, אין לך מספיק מטבעות 🎲 (יתרה: ${balance})` });
+      await editOriginal(body, { content: `${username}, אין לך מספיק בוטיאלים 🎲 (יתרה: ${balance})` });
       return { statusCode: 200, body: "" };
     }
 
@@ -1019,7 +1019,7 @@ if (cmd === "give") {
     const u = await getUser(userId);
     const giverBal = u.balance ?? 100;
     if (giverBal < amount) {
-      await editOriginal(body, { content: `❌ אין לך מספיק מטבעות. היתרה: ${giverBal}.` });
+      await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים. היתרה: ${giverBal}.` });
       return { statusCode: 200, body: "" };
     }
 
@@ -1091,7 +1091,7 @@ if (cmd === "roulette") {
 
   const u = await getUser(userId);
   if ((u.balance ?? 100) < amount) {
-    await editOriginal(body, { content: `❌ אין לך מספיק מטבעות. היתרה: ${u.balance ?? 100}.` });
+    await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים. היתרה: ${u.balance ?? 100}.` });
     return { statusCode: 200, body: "" };
   }
 
@@ -1207,7 +1207,7 @@ closed_at: ymdhmsInTZ()
         // 2) בדיקת יתרה
         const u = await getUser(userId);
         if ((u.balance ?? 100) < amount) {
-await editOriginal(body, { content: `❌ אין לך מספיק מטבעות (יתרה: ${u.balance}).` });
+await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים (יתרה: ${u.balance}).` });
 return { statusCode: 200, body: "" };
 
         }
@@ -1322,8 +1322,8 @@ close_at: closeAtIL,
         );
 
         const confirmText = wasFirst
-  ? `<@${userId}> פתח את הגרלה מספר #${lot.number} עם סכום של **${amount}** מטבעות 💰`
-  : `<@${userId}> הוסיף **${amount}** מטבעות להגרלה 💰`;
+  ? `<@${userId}> פתח את הגרלה מספר #${lot.number} עם סכום של **${amount}** בוטיאלים 💰`
+  : `<@${userId}> הוסיף **${amount}** בוטיאלים להגרלה 💰`;
 
 await editOriginal(body, { content: confirmText });
 
@@ -1351,6 +1351,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
