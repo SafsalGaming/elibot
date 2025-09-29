@@ -144,8 +144,6 @@ async function setUser(userId, patch) {
 // ========== WORDLE HELPERS ==========
 const WORDLE_MAX_ATTEMPTS = 6;
 const WORDLE_TZ = "Asia/Jerusalem";
-const WORDLE_WIN_REWARD = 250; // 💰 פרס על נצחון
-
 const ANSWERS = WORDLE_ANSWERS.map(w => w.toLowerCase());
 
 // yyyy-mm-dd לפי אזור זמן ישראל
@@ -679,21 +677,23 @@ if (guessRaw === game.solution.toLowerCase()) {
     .select("id");
 
   // אם לא עודכנה שורה (כבר סומן כסיום), נטען מחדש את המשחק ונציג בלי פרס
-  let awarded = false;
+   let awarded = false;
   let contentSuffix = "";
 
   if (!finishErr && updatedRows && updatedRows.length > 0) {
-    // מעניקים פרס על ניצחון
+    // מעניקים פרס על ניצחון: הגבוה מבין 150 או 30% מהיתרה הנוכחית
     const u = await getUser(userId);
-    const newBal = (u.balance ?? 100) + WORDLE_WIN_REWARD;
+    const before = u.balance ?? 100;
+    const reward = Math.max(150, Math.floor(before * 0.30));
+    const newBal = before + reward;
     await setUser(userId, { balance: newBal });
     awarded = true;
     contentSuffix =
-      `\n💰 קיבלת **+${WORDLE_WIN_REWARD}** מטבעות על הניצחון!` +
+      `\n💰 קיבלת **+${reward}** מטבעות על הניצחון!` +
       ` יתרה חדשה: **${newBal}**`;
   }
 
-  const left = WORDLE_MAX_ATTEMPTS - attempts;
+
 const history = formatHistoryLines(newHistory);
 let description =
   `${history}\n\n` +
@@ -795,6 +795,7 @@ if (cmd === "balance") {
 }
 
     /* ----- work (+10 / 1h) ----- */
+/* ----- work (max of +10 or 2%) ----- */
 if (cmd === "work") {
   await deferPublicInteraction(body);
 
@@ -811,9 +812,12 @@ if (cmd === "work") {
       return { statusCode: 200, body: "" };
     }
 
-    const balance = (u.balance ?? 100) + 10;
+    const before = u.balance ?? 100;
+    const reward = Math.max(10, Math.floor(before * 0.02));
+    const balance = before + reward;
+
     await setUser(userId, { balance, last_work: new Date(now).toISOString() });
-    await editOriginal(body, { content: `👷 קיבלת **10** מטבעות על עבודה. יתרה: **${balance}**` });
+    await editOriginal(body, { content: `👷 קיבלת **${reward}** מטבעות על עבודה. יתרה: **${balance}**` });
     return { statusCode: 200, body: "" };
   } catch (e) {
     console.log("work error:", e);
@@ -821,6 +825,7 @@ if (cmd === "work") {
     return { statusCode: 200, body: "" };
   }
 }
+
 
     /* ----- coinflip choice amount ----- */
 if (cmd === "coinflip") {
@@ -868,8 +873,8 @@ await editOriginal(body, {
 
     /* ----- daily (+50 / 24h) ----- */
    /* ----- daily (+50 / 24h) ----- */
+/* ----- daily (max of +50 or 10%) / 24h ----- */
 if (cmd === "daily") {
-  // שולח "Thinking..." אפמרלי. אם אתה רוצה פומבי: החלף ל-deferPublicInteraction
   await deferPublicInteraction(body);
 
   try {
@@ -877,20 +882,20 @@ if (cmd === "daily") {
     const u = await getUser(userId);
     const last = u.last_daily ? new Date(u.last_daily).getTime() : 0;
 
-    // בקירור
     if (now - last < DAY) {
       const left = DAY - (now - last);
       const h = Math.floor(left / HOUR);
       const m = Math.floor((left % HOUR) / (60 * 1000));
       await editOriginal(body, { content: `⏳ כבר לקחת היום. נסה שוב בעוד ${h} שעות ו־${m} דקות.` });
-      return { statusCode: 200, body: "" }; // ← תמיד לסיים כך אחרי defer
+      return { statusCode: 200, body: "" };
     }
 
-    // מעניקים
-    const balance = (u.balance ?? 100) + 50;
-    await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
+    const before = u.balance ?? 100;
+    const reward = Math.max(50, Math.floor(before * 0.10));
+    const balance = before + reward;
 
-    await editOriginal(body, { content: `🎁 קיבלת **50** מטבעות! יתרה חדשה: **${balance}**` });
+    await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
+    await editOriginal(body, { content: `🎁 קיבלת **${reward}** מטבעות! יתרה חדשה: **${balance}**` });
     return { statusCode: 200, body: "" };
   } catch (e) {
     console.log("daily error:", e);
@@ -898,6 +903,7 @@ if (cmd === "daily") {
     return { statusCode: 200, body: "" };
   }
 }
+
 
     /* ----- dice amount (d6 vs bot) ----- */
 /* ----- dice amount (d6 vs bot) ----- */
@@ -1003,36 +1009,40 @@ if (cmd === "give") {
 
     /* ----- top ----- */
 if (cmd === "top") {
-  const { data } = await SUPABASE
-    .from("users")
-    .select("id, balance")
-    .order("balance", { ascending: false })
-    .limit(10);
+  await deferPublicInteraction(body); // מציג "Thinking..." ציבורי
 
-  if (!data || data.length === 0) {
-    return json({
-      type: 4,
-      data: {
-        content: `אין עדיין נתונים ללוח הובלות.`
-      }
-    });
-  }
+  try {
+    const { data } = await SUPABASE
+      .from("users")
+      .select("id, balance")
+      .order("balance", { ascending: false })
+      .limit(10);
 
-  const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${u.balance} 🪙`);
+    if (!data || data.length === 0) {
+      await editOriginal(body, { content: `אין עדיין נתונים ללוח הובלות.` });
+      return { statusCode: 200, body: "" };
+    }
 
-  return json({
-    type: 4,
-    data: {
+    const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${u.balance} 🪙`);
+
+    await editOriginal(body, {
       embeds: [
         {
           title: "🏆 טופ 10 עשירים",
           description: lines.join("\n"),
-          color: 0xf1c40f // צבע זהב
+          color: 0xf1c40f
         }
       ]
-    }
-  });
+    });
+
+    return { statusCode: 200, body: "" };
+  } catch (e) {
+    console.log("top error:", e?.message || e);
+    await editOriginal(body, { content: "⚠️ תקלה זמנית. נסה שוב מאוחר יותר." });
+    return { statusCode: 200, body: "" };
+  }
 }
+
 
 
    /* ----- roulette amount ----- */
@@ -1306,6 +1316,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
