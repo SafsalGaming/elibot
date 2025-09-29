@@ -20,8 +20,9 @@ const headers = {
 // === כל הפקודות (שמור על שמות באנגלית, lowercase) ===
 const commands = [
   { name: "balance", description: "Show your coin balance", type: 1 },
-  { name: "daily",   description: "Claim daily bonus (+50 every 24h)", type: 1 },
-  { name: "work",    description: "Earn +10 coins (hourly)", type: 1 },
+  { name: "daily",   description: "Claim the higher of 50 or 10% of your balance (24h cooldown)", type: 1 },
+{ name: "work",    description: "Earn the higher of 10 or 2% of your balance (1h cooldown)", type: 1 },
+
 
   {
     name: "coinflip",
@@ -57,14 +58,14 @@ const commands = [
 
   { name: "top", description: "Show top 10 richest", type: 1 },
 
-  {
-    name: "roulette",
-    description: "Risk bet with rising multiplier (20% bust each hit)",
-    type: 1,
-    options: [
-      { name: "amount", description: "Bet amount", type: 4, required: true, min_value: 1 }
-    ]
-  },
+ {
+  name: "roulette",
+  description: "Risk bet with rising multiplier (bust starts 20%, +1% each round)",
+  type: 1,
+  options: [
+    { name: "amount", description: "Bet amount", type: 4, required: true, min_value: 1 }
+  ]
+},
 
   {
     name: "fight",
@@ -74,9 +75,9 @@ const commands = [
       { name: "amount", description: "Bet amount for the fight", type: 4, required: true, min_value: 1 }
     ]
   },
-  {
+{
   name: "wordle",
-  description: "Daily Wordle game",
+  description: "Daily Wordle game. Win: higher of 150 or 30% of your balance",
   type: 1,
   options: [
     { name: "word", description: "Your 5-letter guess", type: 3, required: false, min_length: 5, max_length: 5 }
@@ -169,4 +170,5 @@ console.log("✅ Registered:", finalList.map(c => ({ id: c.id, name: c.name })))
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
+
 
