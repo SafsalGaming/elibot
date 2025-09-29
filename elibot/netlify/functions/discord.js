@@ -365,7 +365,7 @@ async function editChannelMessage(channelId, messageId, payload) {
 }
 
 // סיכוי למות ברולטה: מתחיל ב־20% וגדל ב־1% בכל סיבוב
-const ROULETTE_BASE_PCT = 0.20;   // סיבוב 1 = 20%
+const ROULETTE_BASE_PCT = 0.22;   // סיבוב 1 = 20%
 const ROULETTE_INCR_PCT = 0.00;   // כל סיבוב +1%
 
 const rouletteBustChance = (round) => {
@@ -1351,6 +1351,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
