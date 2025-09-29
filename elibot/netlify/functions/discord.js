@@ -40,8 +40,8 @@ const BOT_HEADERS = {
 };
 const APP_ID = process.env.DISCORD_APP_ID; // ודא שזה קיים בסביבה!
 // --- Bias settings (ניצחון שחקן) ---
-const COIN_USER_WIN_P = 0.51; // coinflip
-const DICE_USER_WIN_P = 0.43; // dice
+const COIN_USER_WIN_P = 0.52; // coinflip
+const DICE_USER_WIN_P = 0.44; // dice
 const DICE_TIE_P = 1/6;       // נשמור תיקו ~16.67% כמו טבעי
 
 const NOAUTH_HEADERS = {
@@ -1351,6 +1351,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
