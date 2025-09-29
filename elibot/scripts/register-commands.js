@@ -20,7 +20,7 @@ const headers = {
 // === כל הפקודות (שמור על שמות באנגלית, lowercase) ===
 const commands = [
   { name: "balance", description: "Show your coin balance", type: 1 },
-  { name: "daily",   description: "Claim the higher of 50 or 10% of your balance (24h cooldown)", type: 1 },
+  { name: "daily",   description: "Claim the higher of 50 or 10% of your balance (once a day)", type: 1 },
 { name: "work",    description: "Earn the higher of 10 or 2% of your balance (1h cooldown)", type: 1 },
 
 
@@ -170,6 +170,7 @@ console.log("✅ Registered:", finalList.map(c => ({ id: c.id, name: c.name })))
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
+
 
 
 
