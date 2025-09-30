@@ -115,6 +115,32 @@ const HOUR = 60 * 60 * 1000;
 const DAY  = 24 * HOUR;
 
 /* ========== DB HELPERS ========== */
+function toEpochMs(ts) {
+  if (!ts) return 0;
+  if (typeof ts === "number") return ts;
+  let s = String(ts).trim();
+
+  // Postgres timestamptz: "YYYY-MM-DD HH:mm:ss+00" / "+03"
+  // נהפוך ל-ISO: "YYYY-MM-DDTHH:mm:ss+00:00"
+  s = s
+    .replace(" ", "T")
+    .replace(/([+-]\d{2})$/, "$1:00"); // +00 -> +00:00, +03 -> +03:00
+
+  let t = Date.parse(s);
+
+  // גיבוי: אם עדיין NaN, ננסה להתייחס כחסר טיימזון (ישן) ולהוסיף אופסט IL הנוכחי
+  if (!Number.isFinite(t) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(s)) {
+    const isDST = (new Date()).getTimezoneOffset() === -180; // Asia/Jerusalem: קיץ=-180, חורף=-120
+    t = Date.parse(s + (isDST ? "+03:00" : "+02:00"));
+  }
+
+  // בטיחות: אם הפרסינג יצא “בעתיד” עד 6 שעות (גליץ׳ טיימזון), נקבע ל־now כדי לא לנעול משתמשים
+  const now = Date.now();
+  if (Number.isFinite(t) && t > now && (t - now) < 6 * 60 * 60 * 1000) t = now;
+
+  return Number.isFinite(t) ? t : 0;
+}
+
 async function ensureUsernameOnce(userId, displayName) {
   if (!displayName) return;
   const { data } = await SUPABASE.from("users").select("username").eq("id", userId).maybeSingle();
@@ -824,7 +850,7 @@ if (cmd === "work") {
     const u = await getUser(userId);
 // קריאת last_work — כולל תיקון לערכים היסטוריים שנשמרו ללא טיימזון (IL)
 // ערכים כאלה נפרסים כ-UTC ולכן יוצאים בעתיד (2–3 שעות)
-let last = u.last_work ? new Date(u.last_work).getTime() : 0;
+let last = toEpochMs(u.last_work);
 
 if (
   last > now + 5 * 60 * 1000 &&                         // נראה "בעתיד"
@@ -1368,6 +1394,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
