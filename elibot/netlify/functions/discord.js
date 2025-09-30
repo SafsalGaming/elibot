@@ -822,7 +822,23 @@ if (cmd === "work") {
     
     const now = Date.now();
     const u = await getUser(userId);
-    const last = u.last_work ? new Date(u.last_work).getTime() : 0;
+// קריאת last_work — כולל תיקון לערכים היסטוריים שנשמרו ללא טיימזון (IL)
+// ערכים כאלה נפרסים כ-UTC ולכן יוצאים בעתיד (2–3 שעות)
+let last = u.last_work ? new Date(u.last_work).getTime() : 0;
+
+if (
+  last > now + 5 * 60 * 1000 &&                         // נראה "בעתיד"
+  typeof u.last_work === "string" &&
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(u.last_work) // בלי Z/offset
+) {
+  // ננסה להפחית 2 שעות (חורף); אם עדיין בעתיד — נפחית 3 (קיץ/DST)
+  const minus2 = last - 2 * 60 * 60 * 1000;
+  const minus3 = last - 3 * 60 * 60 * 1000;
+  last = minus2 <= now ? minus2 : minus3;
+
+  // ננרמל במסד לפורמט ISO עם Z כדי שהבאג לא יחזור
+  await setUser(userId, { last_work: new Date(last).toISOString() });
+}
 
     if (now - last < HOUR) {
       const left = HOUR - (now - last);
@@ -836,7 +852,7 @@ if (cmd === "work") {
     const reward = Math.max(10, Math.floor(before * 0.02));
     const balance = before + reward;
 
-await setUser(userId, { balance, last_work: ymdhmsInTZ(now, WORDLE_TZ) });
+await setUser(userId, { balance, last_work: new Date(now).toISOString() });
     await editOriginal(body, { content: `👷 קיבלת **${reward}** בוטיאלים על עבודה. יתרה: **${balance}**` });
     return { statusCode: 200, body: "" };
   } catch (e) {
@@ -1352,6 +1368,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
