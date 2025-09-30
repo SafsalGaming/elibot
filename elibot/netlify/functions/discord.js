@@ -67,21 +67,34 @@ async function deferPublicInteraction(body) {
 }
 
 // ממיר ערך של Postgres/טקסט ל-millis מאז epoch (UTC) בצורה בטוחה
-function pgTsToMs(v) {
+// ----- IL Local time helpers -----
+// מפרש כל מחרוזת זמן כאילו היא שעון ישראל, ומתעלם מאופסט/‏Z אם יש.
+// תומך: "YYYY-MM-DD HH:mm:ss+00" / "+03" / "+0300" / "YYYY-MM-DDTHH:mm:ssZ" / בלי אופסט בכלל.
+function toMsILLocal(v) {
   if (!v) return 0;
   if (typeof v === "number") return v;
 
   let s = String(v).trim();
 
-  // "YYYY-MM-DD HH:mm:ss+00" -> "YYYY-MM-DDTHH:mm:ss+00:00"
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[+-]\d{2}(\d{2})?$/.test(s)) {
-    s = s.replace(" ", "T")
-         .replace(/([+-]\d{2})(\d{2})$/, "$1:$2")  // +0300 -> +03:00
-         .replace(/([+-]\d{2})$/, "$1:00");        // +03 -> +03:00 / +00 -> +00:00
-  }
+  // החלפת רווח ל-T כדי ש-Date.parse יתייחס מקומית
+  s = s.replace(" ", "T");
 
-  const t = Date.parse(s);
+  // זריקת אופסט/‏Z בסוף המחרוזת (אנחנו מתייחסים לערך כקיר-שעון ישראל)
+  s = s.replace(/([+-]\d{2}:\d{2}|[+-]\d{2}\d{2}|[+-]\d{2}|Z)$/i, "");
+
+  // אם נשארו אלפיות, זה בסדר: "YYYY-MM-DDTHH:mm:ss.sss"
+  const t = Date.parse(s); // יפורש "local time" — אצלנו Asia/Jerusalem
   return Number.isFinite(t) ? t : 0;
+}
+
+// זמן נוכחי כמחרוזת ישראלית לשמירה במסד, בלי אופסט/‏Z.
+function nowILString() {
+  return ymdhmsInTZ(Date.now(), "Asia/Jerusalem"); // מחזיר "YYYY-MM-DDTHH:mm:ss"
+}
+
+// פורמט יפה להצגה "YYYY-MM-DD HH:mm:ss" לפי ישראל
+function fmtReadyIL(ms) {
+  return ymdhmsInTZ(ms, "Asia/Jerusalem").replace("T", " ");
 }
 
 async function deleteOriginalInteraction(body) {
@@ -132,31 +145,6 @@ const HOUR = 60 * 60 * 1000;
 const DAY  = 24 * HOUR;
 
 /* ========== DB HELPERS ========== */
-function toEpochMs(ts) {
-  if (!ts) return 0;
-  if (typeof ts === "number") return ts;
-  let s = String(ts).trim();
-
-  // Postgres timestamptz: "YYYY-MM-DD HH:mm:ss+00" / "+03"
-  // נהפוך ל-ISO: "YYYY-MM-DDTHH:mm:ss+00:00"
-  s = s
-    .replace(" ", "T")
-    .replace(/([+-]\d{2})$/, "$1:00"); // +00 -> +00:00, +03 -> +03:00
-
-  let t = Date.parse(s);
-
-  // גיבוי: אם עדיין NaN, ננסה להתייחס כחסר טיימזון (ישן) ולהוסיף אופסט IL הנוכחי
-  if (!Number.isFinite(t) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(s)) {
-    const isDST = (new Date()).getTimezoneOffset() === -180; // Asia/Jerusalem: קיץ=-180, חורף=-120
-    t = Date.parse(s + (isDST ? "+03:00" : "+02:00"));
-  }
-
-  // בטיחות: אם הפרסינג יצא “בעתיד” עד 6 שעות (גליץ׳ טיימזון), נקבע ל־now כדי לא לנעול משתמשים
-  const now = Date.now();
-  if (Number.isFinite(t) && t > now && (t - now) < 6 * 60 * 60 * 1000) t = now;
-
-  return Number.isFinite(t) ? t : 0;
-}
 
 async function ensureUsernameOnce(userId, displayName) {
   if (!displayName) return;
@@ -859,36 +847,42 @@ if (cmd === "balance") {
     /* ----- work (+10 / 1h) ----- */
 /* ----- work (max of +10 or 2%) ----- */
 /* ----- work (max of +10 or 2%) ----- */
+/* ----- work (IL-local cooldown 1h, reward max(10, 2%)) ----- */
 if (cmd === "work") {
   await deferPublicInteraction(body);
 
   try {
-    const now = Date.now();
+    const nowMs = Date.now();                // IL-local clock (בזכות process.env.TZ)
     const u = await getUser(userId);
 
-    // קוראים את הזמן האחרון בבטחה (תומך גם ב-"2025-09-30 07:47:53+00" וגם ב-ISO)
-    const last = pgTsToMs(u.last_work);
+    // קורא מהמסד ומפרש *כמו ישראל* גם אם נשמר עם +00/+03/Z בעבר
+    const lastMs = toMsILLocal(u.last_work);
 
-    // קולדאון שעה — חישוב נטו ב-UTC
-    const left = Math.max(0, (60 * 60 * 1000) - (now - last));
+    // קולדאון שעה — הכל לפי ישראל (הפרש millis רגיל)
+    const HOUR = 60 * 60 * 1000;
+    const left = Math.max(0, HOUR - (nowMs - lastMs));
+
     if (left > 0) {
       const m = Math.floor(left / 60000);
       const s = Math.floor((left % 60000) / 1000);
-      // מידע נחמד: מתי מוכן שוב לפי שעון ישראל
-      const readyAtIL = ymdhmsInTZ(last + 60*60*1000, "Asia/Jerusalem").replace("T"," ");
-      await editOriginal(body, { content: `⏳ עבדת לא מזמן. נסה שוב בעוד ${m} דק׳ ו־${s} שניות. (מוכן ב־${readyAtIL} לפי ישראל)` });
+      const readyAtIL = fmtReadyIL(lastMs + HOUR);
+      await editOriginal(body, {
+        content: `⏳ עבדת לא מזמן. נסה שוב בעוד ${m} דק׳ ו־${s} שניות. (מוכן ב־${readyAtIL} לפי ישראל)`
+      });
       return { statusCode: 200, body: "" };
     }
 
-    // מותר לעבוד — מחשבים תגמול ומעדכנים
-    const before = u.balance ?? 100;
-    const reward = Math.max(10, Math.floor(before * 0.02));
+    // מותר לעבוד — תגמול
+    const before  = u.balance ?? 100;
+    const reward  = Math.max(10, Math.floor(before * 0.02));
     const balance = before + reward;
 
-    // תמיד שומרים UTC ISO נקי — בלי משחקי אזורי זמן
-    await setUser(userId, { balance, last_work: new Date(now).toISOString() });
+    // שומרים למסד *כשעה ישראלית ללא אופסט/Z* כדי שתמיד יפורש נכון
+    await setUser(userId, { balance, last_work: nowILString() });
 
-    await editOriginal(body, { content: `👷 קיבלת **${reward}** בוטיאלים על עבודה. יתרה: **${balance}**` });
+    await editOriginal(body, {
+      content: `👷 קיבלת **${reward}** בוטיאלים על עבודה. יתרה: **${balance}**`
+    });
     return { statusCode: 200, body: "" };
   } catch (e) {
     console.log("work error:", e);
@@ -896,7 +890,6 @@ if (cmd === "work") {
     return { statusCode: 200, body: "" };
   }
 }
-
 
     /* ----- coinflip choice amount ----- */
 if (cmd === "coinflip") {
@@ -1403,6 +1396,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
