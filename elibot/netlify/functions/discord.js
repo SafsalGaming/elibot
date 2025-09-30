@@ -15,7 +15,7 @@ const json = (obj, status = 200) => ({
 
 /* ========== CONFIG ========== */
 const SUPABASE = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-const eliCoin = '<:EliCoin:1422316802188509268>'; // שם האימוג'י וה־ID האמיתי
+const eliCoin = '<a:FlipEliCoin:1422337837671518228>'; // שם האימוג'י וה־ID האמיתי
 
 // ערוצי יעד
 const ALLOWED_GAMBLING_CHANNEL = "1418196736958005361"; // הימורים (roulette / fight / coinflip / dice / daily / work)
@@ -1352,6 +1352,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
