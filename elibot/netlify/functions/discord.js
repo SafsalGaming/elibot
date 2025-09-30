@@ -867,7 +867,7 @@ if (cmd === "work") {
       const s = Math.floor((left % 60000) / 1000);
       const readyAtIL = fmtReadyIL(lastMs + HOUR);
       await editOriginal(body, {
-        content: `⏳ עבדת לא מזמן. נסה שוב בעוד ${m} דק׳ ו־${s} שניות. (מוכן ב־${readyAtIL} לפי ישראל)`
+        content: `⏳ עבדת לא מזמן. נסה שוב בעוד ${m} דק׳ ו־${s} שניות.`
       });
       return { statusCode: 200, body: "" };
     }
@@ -1396,6 +1396,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
