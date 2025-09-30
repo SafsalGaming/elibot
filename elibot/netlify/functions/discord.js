@@ -66,6 +66,23 @@ async function deferPublicInteraction(body) {
   });
 }
 
+// ממיר ערך של Postgres/טקסט ל-millis מאז epoch (UTC) בצורה בטוחה
+function pgTsToMs(v) {
+  if (!v) return 0;
+  if (typeof v === "number") return v;
+
+  let s = String(v).trim();
+
+  // "YYYY-MM-DD HH:mm:ss+00" -> "YYYY-MM-DDTHH:mm:ss+00:00"
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[+-]\d{2}(\d{2})?$/.test(s)) {
+    s = s.replace(" ", "T")
+         .replace(/([+-]\d{2})(\d{2})$/, "$1:$2")  // +0300 -> +03:00
+         .replace(/([+-]\d{2})$/, "$1:00");        // +03 -> +03:00 / +00 -> +00:00
+  }
+
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : 0;
+}
 
 async function deleteOriginalInteraction(body) {
   const appId = body.application_id || process.env.DISCORD_APP_ID;
@@ -841,44 +858,36 @@ if (cmd === "balance") {
 
     /* ----- work (+10 / 1h) ----- */
 /* ----- work (max of +10 or 2%) ----- */
+/* ----- work (max of +10 or 2%) ----- */
 if (cmd === "work") {
   await deferPublicInteraction(body);
 
   try {
-    
     const now = Date.now();
     const u = await getUser(userId);
-// קריאת last_work — כולל תיקון לערכים היסטוריים שנשמרו ללא טיימזון (IL)
-// ערכים כאלה נפרסים כ-UTC ולכן יוצאים בעתיד (2–3 שעות)
-let last = toEpochMs(u.last_work);
 
-if (
-  last > now + 5 * 60 * 1000 &&                         // נראה "בעתיד"
-  typeof u.last_work === "string" &&
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(u.last_work) // בלי Z/offset
-) {
-  // ננסה להפחית 2 שעות (חורף); אם עדיין בעתיד — נפחית 3 (קיץ/DST)
-  const minus2 = last - 2 * 60 * 60 * 1000;
-  const minus3 = last - 3 * 60 * 60 * 1000;
-  last = minus2 <= now ? minus2 : minus3;
+    // קוראים את הזמן האחרון בבטחה (תומך גם ב-"2025-09-30 07:47:53+00" וגם ב-ISO)
+    const last = pgTsToMs(u.last_work);
 
-  // ננרמל במסד לפורמט ISO עם Z כדי שהבאג לא יחזור
-  await setUser(userId, { last_work: new Date(last).toISOString() });
-}
-
-    if (now - last < HOUR) {
-      const left = HOUR - (now - last);
-      const m = Math.floor(left / (60 * 1000));
-      const s = Math.floor((left % (60 * 1000)) / 1000);
-      await editOriginal(body, { content: `⏳ עבדת לא מזמן. נסה שוב בעוד ${m} דק׳ ו־${s} שניות.` });
+    // קולדאון שעה — חישוב נטו ב-UTC
+    const left = Math.max(0, (60 * 60 * 1000) - (now - last));
+    if (left > 0) {
+      const m = Math.floor(left / 60000);
+      const s = Math.floor((left % 60000) / 1000);
+      // מידע נחמד: מתי מוכן שוב לפי שעון ישראל
+      const readyAtIL = ymdhmsInTZ(last + 60*60*1000, "Asia/Jerusalem").replace("T"," ");
+      await editOriginal(body, { content: `⏳ עבדת לא מזמן. נסה שוב בעוד ${m} דק׳ ו־${s} שניות. (מוכן ב־${readyAtIL} לפי ישראל)` });
       return { statusCode: 200, body: "" };
     }
 
+    // מותר לעבוד — מחשבים תגמול ומעדכנים
     const before = u.balance ?? 100;
     const reward = Math.max(10, Math.floor(before * 0.02));
     const balance = before + reward;
 
-await setUser(userId, { balance, last_work: new Date(now).toISOString() });
+    // תמיד שומרים UTC ISO נקי — בלי משחקי אזורי זמן
+    await setUser(userId, { balance, last_work: new Date(now).toISOString() });
+
     await editOriginal(body, { content: `👷 קיבלת **${reward}** בוטיאלים על עבודה. יתרה: **${balance}**` });
     return { statusCode: 200, body: "" };
   } catch (e) {
@@ -1394,6 +1403,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
