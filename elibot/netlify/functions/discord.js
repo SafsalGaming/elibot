@@ -179,6 +179,9 @@ async function setUser(userId, patch) {
 const WORDLE_MAX_ATTEMPTS = 6;
 const WORDLE_TZ = "Asia/Jerusalem";
 const ANSWERS = WORDLE_ANSWERS.map(w => w.toLowerCase());
+// === Number formatting (עם פסיקים, סגנון 1,000) ===
+const N_EN = new Intl.NumberFormat("en-US");
+const fmtN = (x) => N_EN.format(Math.trunc(Number(x) || 0)); // תמיד שלם, עם פסיקים
 
 // yyyy-mm-dd לפי אזור זמן ישראל
 function ymdInTZ(ts = Date.now(), tz = WORDLE_TZ) {
@@ -840,7 +843,7 @@ if (cmd === "lottery_updates_role") {
 if (cmd === "balance") {
   await deferPublicInteraction(body); // או public
   const u = await getUser(userId);
-  await editOriginal(body, { content: `💰 ${username}, היתרה שלך: **${u.balance}** בוטיאלים` });
+await editOriginal(body, { content: `💰 ${username}, היתרה שלך: **${fmtN(u.balance)}** בוטיאלים` });
   return { statusCode: 200, body: "" };
 }
 
@@ -1396,6 +1399,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
