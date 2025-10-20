@@ -444,7 +444,7 @@ function lotteryOpenEmbed(number, startAtISO, closeAtISO, total, lines) {
       description:
         `${fmtIL(startAtISO)}\n` +
         `─────────────────────────────\n` +
-        `💰 **סכום זכייה:** ${total} בוטיאלים\n` +
+        `💰 **סכום זכייה:** ${fmtN(total)} בוטיאלים\n` +
         `─────────────────────────────\n` +
         `🎲 **סיכויי זכייה:**\n` +
         (lines.length ? lines.join("\n") : "_עדיין אין משתתפים נוספים_") +
@@ -462,7 +462,7 @@ function lotteryWinnerEmbed(number, winnerId, total) {
       title: `**🏆 הזוכה בהגרלה #${number} הוא: **`,
       description:
         `─────────────────────\n <@${winnerId}> 🎉\n` +
-        `─────────────────────\n**💰 פרס:** ${total} בוטיאלים`,
+        `─────────────────────\n**💰 פרס:** ${fmtN(total)} בוטיאלים`,
       color: 0xFF9900
     }]
   };
@@ -550,7 +550,7 @@ if (cid.startsWith("roulette:")) {
     if (bust) {
       return json({
         type: 7,
-        data: { content: `🎰 **BUST!** הפסדת (${bet}).`, components: [] }
+        data: { content: `🎰 **BUST!** הפסדת (${fmtN(bet)}).`, components: [] }
       });
     }
 
@@ -559,7 +559,7 @@ if (cid.startsWith("roulette:")) {
     return json({
       type: 7,
       data: {
-        content: `🎰 רולטה — סיבוב ${nextRound} · סכום נוכחי: **${payout}** (סיכוי פיצוץ הבא: ${nextBustPct}%)`,
+        content: `🎰 רולטה — סיבוב ${nextRound} · סכום נוכחי: **${fmtN(payout)}** (סיכוי פיצוץ הבא: ${nextBustPct}%)`,
         components: [
           row([
             btn(`roulette:${ownerId}:${bet}:${nextRound}:hit`,  "המשך", 3),
@@ -581,7 +581,7 @@ if (cid.startsWith("roulette:")) {
     return json({
       type: 7,
       data: {
-        content: `💵 יצאת עם **${payout}** (רווח **+${profit}**). יתרה: **${newBal}**`,
+        content: `💵 יצאת עם **${fmtN(payout)}** (רווח **+${fmtN(profit)}**). יתרה: **${fmtN(newBal)}**`,
         components: []
       }
     });
@@ -606,7 +606,7 @@ if (cid.startsWith("roulette:")) {
         return json({ type: 4, data: { flags: 64, content: `❌ <@${creatorId}> אין מספיק בוטיאלים כדי לקיים את הקרב כרגע.` } });
       }
       if ((b.balance ?? 100) < amount) {
-        return json({ type: 4, data: { flags: 64, content: `❌ אין לך מספיק בוטיאלים להצטרפות (נדרש ${amount}).` } });
+        return json({ type: 4, data: { flags: 64, content: `❌ אין לך מספיק בוטיאלים להצטרפות (נדרש ${fmtN(amount)}).` } });
       }
 
       await setUser(creatorId, { balance: (a.balance ?? 100) - amount });
@@ -621,8 +621,8 @@ if (cid.startsWith("roulette:")) {
         type: 7,
         data: {
           content:
-            `🥊 קרב על **${amount}**! המשתתפים: <@${creatorId}> מול <@${userId}>.\n` +
-            `🏆 הזוכה: <@${winner}> וקיבל **${prize}** בוטיאלים.`,
+            `🥊 קרב על **${fmtN(amount)}**! המשתתפים: <@${creatorId}> מול <@${userId}>.\n` +
+            `🏆 הזוכה: <@${winner}> וקיבל **${fmtN(prize)}** בוטיאלים.`,
           components: []
         }
       });
@@ -639,7 +639,7 @@ if (cid.startsWith("roulette:")) {
       return json({
         type: 7,
         data: {
-          content: `🥊 הקרב על **${amount}** בוטל על ידי <@${creatorId}>.`,
+          content: `🥊 הקרב על **${fmtN(amount)}** בוטל על ידי <@${creatorId}>.`,
           components: []
         }
       });
@@ -741,8 +741,8 @@ if (guessRaw === game.solution.toLowerCase()) {
     await setUser(userId, { balance: newBal });
     awarded = true;
     contentSuffix =
-      `\n💰 קיבלת **+${reward}** בוטיאלים על הניצחון!` +
-      ` יתרה חדשה: **${newBal}**`;
+      `\n💰 קיבלת **+${fmtN(reward)}** בוטיאלים על הניצחון!` +
+      ` יתרה חדשה: **${fmtN(newBal)}**`;
   }
 
 
@@ -884,7 +884,7 @@ if (cmd === "work") {
     await setUser(userId, { balance, last_work: nowILString() });
 
     await editOriginal(body, {
-      content: `👷 קיבלת **${reward}** בוטיאלים על עבודה. יתרה: **${balance}**`
+      content: `👷 קיבלת **${fmtN(reward)}** בוטיאלים על עבודה. יתרה: **${fmtN(balance)}**`
     });
     return { statusCode: 200, body: "" };
   } catch (e) {
@@ -913,7 +913,7 @@ if (cmd === "coinflip") {
 
     const u = await getUser(userId);
     if (amount > (u.balance ?? 100)) {
-      await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים. היתרה: ${u.balance ?? 100}.` });
+      await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים. היתרה: ${fmtN(u.balance ?? 100)}.` });
       return { statusCode: 200, body: "" };
     }
 
@@ -926,7 +926,7 @@ const balance = (u.balance ?? 100) + (won ? amount : -amount);
 
 await setUser(userId, { balance });
 await editOriginal(body, {
-  content: `🪙 יצא **${flip}** — ${won ? `זכית! +${amount}` : `הפסדת... -${amount}`} | יתרה: **${balance}**`
+  content: `🪙 יצא **${flip}** — ${won ? `זכית! +${fmtN(amount)}` : `הפסדת... -${fmtN(amount)}`} | יתרה: **${fmtN(balance)}**`
 });
 
     return { statusCode: 200, body: "" };
@@ -977,7 +977,7 @@ if (cmd === "daily") {
 // היה: await setUser(userId, { balance, last_daily: new Date(now).toISOString() });
 await setUser(userId, { balance, last_daily: ymdInTZ(now, WORDLE_TZ) }); // למשל "2025-02-03"
 
-    await editOriginal(body, { content: `🎁 קיבלת **${reward}** בוטיאלים! יתרה חדשה: **${balance}**` });
+    await editOriginal(body, { content: `🎁 קיבלת **${fmtN(reward)}** בוטיאלים! יתרה חדשה: **${fmtN(balance)}**` });
     return { statusCode: 200, body: "" };
   } catch (e) {
     console.log("daily error:", e);
@@ -1004,7 +1004,7 @@ if (cmd === "dice") {
     let balance = u0?.balance ?? 100;
 
     if (balance < amount) {
-      await editOriginal(body, { content: `${username}, אין לך מספיק בוטיאלים 🎲 (יתרה: ${balance})` });
+      await editOriginal(body, { content: `${username}, אין לך מספיק בוטיאלים 🎲 (יתרה: ${fmtN(balance)})` });
       return { statusCode: 200, body: "" };
     }
 
@@ -1029,13 +1029,13 @@ if (r < DICE_USER_WIN_P) {
     if (userRoll > botRoll) {
       balance += amount;
       await setUser(userId, { balance });
-      await editOriginal(body, { content: `🎲 אתה: **${userRoll}**, אלי: **${botRoll}** — ניצחת! +${amount}. יתרה: **${balance}**` });
+      await editOriginal(body, { content: `🎲 אתה: **${userRoll}**, אלי: **${botRoll}** — ניצחת! +${fmtN(amount)}. יתרה: **${fmtN(balance)}**` });
     } else if (userRoll < botRoll) {
       balance -= amount;
       await setUser(userId, { balance });
-      await editOriginal(body, { content: `🎲 אתה: **${userRoll}**, אלי: **${botRoll}** — עוד ניצחון לאלי -${amount}. יתרה: **${balance}**` });
+      await editOriginal(body, { content: `🎲 אתה: **${userRoll}**, אלי: **${botRoll}** — עוד ניצחון לאלי -${fmtN(amount)}. יתרה: **${fmtN(balance)}**` });
     } else {
-      await editOriginal(body, { content: `🎲 תיקו! אתה: **${userRoll}**, אלי: **${botRoll}** — אין שינוי (יתרה: ${balance})` });
+      await editOriginal(body, { content: `🎲 תיקו! אתה: **${userRoll}**, אלי: **${botRoll}** — אין שינוי (יתרה: ${fmtN(balance)})` });
     }
 
     return { statusCode: 200, body: "" };
@@ -1067,7 +1067,7 @@ if (cmd === "give") {
     const u = await getUser(userId);
     const giverBal = u.balance ?? 100;
     if (giverBal < amount) {
-      await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים. היתרה: ${giverBal}.` });
+      await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים. היתרה: ${fmtN(giverBal)}.` });
       return { statusCode: 200, body: "" };
     }
 
@@ -1079,7 +1079,7 @@ if (cmd === "give") {
     await setUser(target,  { balance: receiverBal + amount });
 
     await editOriginal(body, {
-      content: `🤝 העברת **${amount}** ל־<@${target}>. היתרה שלך: **${giverBal - amount}**, שלו: **${receiverBal + amount}**`
+      content: `🤝 העברת **${fmtN(amount)}** ל־<@${target}>. היתרה שלך: **${fmtN(giverBal - amount)}**, שלו: **${fmtN(receiverBal + amount)}**`
     });
     return { statusCode: 200, body: "" };
   } catch (e) {
@@ -1105,7 +1105,7 @@ if (cmd === "top") {
       return { statusCode: 200, body: "" };
     }
 
-    const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${u.balance} ${eliCoin}`);
+    const lines = data.map((u, i) => `**${i + 1}.** <@${u.id}> — ${fmtN(u.balance)} ${eliCoin}`);
 
     await editOriginal(body, {
       embeds: [
@@ -1139,7 +1139,7 @@ if (cmd === "roulette") {
 
   const u = await getUser(userId);
   if ((u.balance ?? 100) < amount) {
-    await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים. היתרה: ${u.balance ?? 100}.` });
+    await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים. היתרה: ${fmtN(u.balance ?? 100)}.` });
     return { statusCode: 200, body: "" };
   }
 
@@ -1150,7 +1150,7 @@ if (cmd === "roulette") {
   const immediateBust = Math.random() < rouletteBustChance(1);
   if (immediateBust) {
     await editOriginal(body, {
-      content: `🎰 **BUST!** הפסדת (${amount}).`,
+      content: `🎰 **BUST!** הפסדת (${fmtN(amount)}).`,
       components: [] // נטרל כפתורים אם היו
     });
     return { statusCode: 200, body: "" };
@@ -1162,7 +1162,7 @@ if (cmd === "roulette") {
   const nextBustPct = Math.round(rouletteBustChance(round + 1) * 100);
 
   await editOriginal(body, {
-    content: `🎰 רולטה — סיבוב ${round} · סכום נוכחי: **${payout}** (סיכוי פיצוץ הבא: ${nextBustPct}%)`,
+    content: `🎰 רולטה — סיבוב ${round} · סכום נוכחי: **${fmtN(payout)}** (סיכוי פיצוץ הבא: ${nextBustPct}%)`,
     components: [
       row([
         btn(`roulette:${userId}:${amount}:${round}:hit`,  "המשך", 3),
@@ -1187,8 +1187,8 @@ if (cmd === "fight") {
 
   await editOriginal(body, {
     content:
-      `🥊 <@${userId}> מזמין לקרב על **${amount}**. ` +
-      `לחצו **Join** כדי להצטרף — הזוכה יקבל **${amount * 2}**.\n` +
+      `🥊 <@${userId}> מזמין לקרב על **${fmtN(amount)}**. ` +
+      `לחצו **Join** כדי להצטרף — הזוכה יקבל **${fmtN(amount * 2)}**.\n` +
       `> רק המכריז יכול ללחוץ **Cancel**.`,
     components: [
       row([
@@ -1255,7 +1255,7 @@ closed_at: ymdhmsInTZ()
         // 2) בדיקת יתרה
         const u = await getUser(userId);
         if ((u.balance ?? 100) < amount) {
-await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים (יתרה: ${u.balance}).` });
+await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים (יתרה: ${fmtN(u.balance)}).` });
 return { statusCode: 200, body: "" };
 
         }
@@ -1370,8 +1370,8 @@ close_at: closeAtIL,
         );
 
         const confirmText = wasFirst
-  ? `<@${userId}> פתח את הגרלה מספר #${lot.number} עם סכום של **${amount}** בוטיאלים 💰`
-  : `<@${userId}> הוסיף **${amount}** בוטיאלים להגרלה 💰`;
+  ? `<@${userId}> פתח את הגרלה מספר #${lot.number} עם סכום של **${fmtN(amount)}** בוטיאלים 💰`
+  : `<@${userId}> הוסיף **${fmtN(amount)}** בוטיאלים להגרלה 💰`;
 
 await editOriginal(body, { content: confirmText });
 
@@ -1399,6 +1399,7 @@ return { statusCode: 200, body: "" };
     body: JSON.stringify({ type: 5 })
   };
 }
+
 
 
 
