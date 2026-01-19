@@ -1231,40 +1231,47 @@ await deferPublicInteraction(body);
 
       try {
         // 1) אם יש הגרלה פתוחה שפג זמנה — נסגור, נכריז זוכה בהודעה נפרדת, ונסמן סגורה
-        const { data: open } = await SUPABASE
+        const nowMs = Date.now();
+        let { data: lot } = await SUPABASE
           .from("lotteries")
-          .select("id,status,is_open,close_at,message_id,number,channel_id")
+          .select("id,status,is_open,created_at,close_at,message_id,number,channel_id")
           .eq("status","open")
           .eq("is_open", true)
           .maybeSingle();
 
-        if (open && open.close_at && Date.now() > new Date(open.close_at).getTime()) {
-          const { data: rows } = await SUPABASE
-            .from("lottery_entries")
-            .select("user_id,amount")
-            .eq("lottery_id", open.id);
+        let createdNew = false;
 
-          const totalPast = (rows || []).reduce((s, r) => s + r.amount, 0);
+        if (lot && lot.created_at) {
+          const createdMs = new Date(lot.created_at).getTime();
+          if (Number.isFinite(createdMs) && (nowMs - createdMs) >= 24 * 60 * 60 * 1000) {
+            const { data: rows } = await SUPABASE
+              .from("lottery_entries")
+              .select("user_id,amount")
+              .eq("lottery_id", lot.id);
 
-          if (totalPast > 0 && rows?.length) {
-            let roll = Math.random() * totalPast;
-            let winner = rows[0].user_id;
-            for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
+            const totalPast = (rows || []).reduce((s, r) => s + r.amount, 0);
 
-            const w = await getUser(winner);
-            await setUser(winner, { balance: (w.balance ?? 100) + totalPast });
+            if (totalPast > 0 && rows?.length) {
+              let roll = Math.random() * totalPast;
+              let winner = rows[0].user_id;
+              for (const r of rows) { roll -= r.amount; if (roll <= 0) { winner = r.user_id; break; } }
 
-            // הכרזה חדשה ונפרדת (לא עורכים את הודעת הלוטו המקורית)
-            await postChannelMessage(open.channel_id || LOTTERY_CHANNEL_ID, {
-              content: `<@${winner}>`,
-              ...lotteryWinnerEmbed(open.number, winner, totalPast)
-            });
+              const w = await getUser(winner);
+              await setUser(winner, { balance: (w.balance ?? 100) + totalPast });
+
+              // x"x>x"x-x" x-x"xcx" xxÿxx"x"x? (xox? x?xx"x>xTx? x?x? x"xx"x?x? x"xoxx~x x"xzxxx"xTx?)
+              await postChannelMessage(lot.channel_id || LOTTERY_CHANNEL_ID, {
+                content: `<@${winner}>`,
+                ...lotteryWinnerEmbed(lot.number, winner, totalPast)
+              });
+            }
+            await SUPABASE.from("lotteries").update({
+              status: "closed",
+              is_open: false,
+              closed_at: ymdhmsInTZ()
+            }).eq("id", lot.id);
+            lot = null;
           }
-          await SUPABASE.from("lotteries").update({
-            status: "closed",
-            is_open: false,
-closed_at: ymdhmsInTZ()
-          }).eq("id", open.id);
         }
 
         // 2) בדיקת יתרה
@@ -1275,31 +1282,20 @@ return { statusCode: 200, body: "" };
 
         }
 
-        // 3) לוקחים/פותחים הגרלה פתוחה
-        let { data: lot } = await SUPABASE
-          .from("lotteries")
-          .select("id,status,is_open,message_id,close_at,created_at,number,channel_id")
-          .eq("status","open")
-          .eq("is_open", true)
-          .maybeSingle();
-
-        let createdNew = false;
-
+        // 3) xoxxx-xTx?/xxx?x-xTx? x"x'x"xox" xx?xx-x"
         if (lot) {
-          // ודא ש-close_at = created_at + 24h
-const targetClose = ymdhmsInTZ(new Date(lot.created_at).getTime() + 24*60*60*1000, WORDLE_TZ);
+          // xx"x? xc-close_at = created_at + 24h
+          const targetClose = ymdhmsInTZ(new Date(lot.created_at).getTime() + 24*60*60*1000, WORDLE_TZ);
           if (!lot.close_at || Math.abs(new Date(lot.close_at).getTime() - new Date(targetClose).getTime()) > 2000) {
             await SUPABASE.from("lotteries").update({ close_at: targetClose }).eq("id", lot.id);
             lot.close_at = targetClose;
           }
         } else {
-          // אין הגרלה פתוחה — יוצרים חדשה בהתאם לסכימה עם NOT NULL
-          const nowMs = Date.now();
-const createdAtIL = ymdhmsInTZ(nowMs, WORDLE_TZ);
-const closeAtIL   = ymdhmsInTZ(nowMs + 24*60*60*1000, WORDLE_TZ);
+          // x?xTxY x"x'x"xox" xx?xx-x" ƒ? xTxxÝx"xTx? x-x"xcx" x`x"x?x?x? xox­x>xTxzx" x?x? NOT NULL
+          const createdAtIL = ymdhmsInTZ(nowMs, WORDLE_TZ);
+          const closeAtIL   = ymdhmsInTZ(nowMs + 24*60*60*1000, WORDLE_TZ);
 
-
-          // מספר רץ
+          // xzx­xx" x"x
           const { data: lastNumRow } = await SUPABASE
             .from("lotteries")
             .select("number")
@@ -1312,9 +1308,9 @@ const closeAtIL   = ymdhmsInTZ(nowMs + 24*60*60*1000, WORDLE_TZ);
           const insertRow = {
             id: newId,
             channel_id: LOTTERY_CHANNEL_ID,
-created_at: createdAtIL,
+            created_at: createdAtIL,
             closed_at: null,
-close_at: closeAtIL,
+            close_at: closeAtIL,
             total: 0,
             status: "open",
             number: nextNumber,
@@ -1329,13 +1325,12 @@ close_at: closeAtIL,
             .single();
           if (insErr) {
             console.log("lottery insert error:", insErr);
-            await postChannelMessage(channelId, { content: `<@${userId}> ⚠️ תקלה ביצירת הגרלה חדשה.` });
+            await postChannelMessage(channelId, { content: `<@${userId}> ƒsÿ‹,? x?xxox" x`xTxÝxTx"x? x"x'x"xox" x-x"xcx".` });
             return { statusCode: 200, body: "" };
           }
           lot = newLot;
           createdNew = true;
         }
-
         // 4) האם זה המשתתף/הראשון לפני ההוספה
         const { count: beforeCount } = await SUPABASE
           .from("lottery_entries")
