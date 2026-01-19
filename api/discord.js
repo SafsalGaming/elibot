@@ -3,7 +3,22 @@ import { verifyKey } from "discord-interactions";
 import { createClient } from "@supabase/supabase-js";
 import { fetch } from "undici";
 import { randomUUID } from "crypto";
-import { WORDLE_ANSWERS } from "./wordle-words.js";
+import { readFile } from "node:fs/promises";
+const WORD_LIST_PATH = new URL("./words.json", import.meta.url);
+let cachedWordList = null;
+
+async function getWordList() {
+  if (cachedWordList) return cachedWordList;
+
+  const text = await readFile(WORD_LIST_PATH, "utf8");
+  const list = JSON.parse(text)
+    .map((w) => String(w).trim().toLowerCase())
+    .filter((w) => w.length === 5 && /^[a-z]{5}$/.test(w));
+
+  const set = new Set(list);
+  cachedWordList = { list, set };
+  return cachedWordList;
+}
 
 export const config = {
   api: {
@@ -193,7 +208,6 @@ async function setUser(userId, patch) {
 // ========== WORDLE HELPERS ==========
 const WORDLE_MAX_ATTEMPTS = 6;
 const WORDLE_TZ = "Asia/Jerusalem";
-const ANSWERS = WORDLE_ANSWERS.map(w => w.toLowerCase());
 // === Number formatting (עם פסיקים, סגנון 1,000) ===
 const N_EN = new Intl.NumberFormat("en-US");
 const fmtN = (x) => N_EN.format(Math.trunc(Number(x) || 0)); // תמיד שלם, עם פסיקים
@@ -238,7 +252,9 @@ async function getOrCreateWordleGame(userId, ymd) {
 
   if (data) return data;
 
-  const solution = ANSWERS[Math.floor(Math.random() * ANSWERS.length)];
+  const { list } = await getWordList();
+  if (!list.length) throw new Error("word list empty");
+  const solution = list[Math.floor(Math.random() * list.length)];
 const row = {
   user_id: userId, date: ymd, solution,
   attempts: 0, finished: false, guesses: [],
@@ -688,6 +704,7 @@ if (cmd === "wordle") {
     const todayHeb = ddmmyyyyInTZ();
     const guessRaw = (opts.word || "").toLowerCase().trim();
 
+    const { set: wordSet } = await getWordList();
     let game = await getOrCreateWordleGame(userId, todayYMD);
 
     // ללא פרמטר — מצב יומי
@@ -721,7 +738,11 @@ await editOriginal(body, wordleEmbed(
 
     // בדיקת ולידציה בסיסית — 5 אותיות באנגלית
     if (!isValidGuess(guessRaw)) {
-await editOriginal(body, wordleEmbed(todayHeb, "❌ מילה לא חוקית. חייב 5 אותיות באנגלית."));
+      await editOriginal(body, wordleEmbed(todayHeb, "Invalid word. Use exactly 5 English letters."));
+      return { statusCode: 200, body: "" };
+    }
+    if (!wordSet.has(guessRaw)) {
+      await editOriginal(body, wordleEmbed(todayHeb, "Invalid word. Try again."));
       return { statusCode: 200, body: "" };
     }
 
