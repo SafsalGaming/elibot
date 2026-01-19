@@ -1,0 +1,14 @@
+{
+  "type": "module",
+  "scripts": {
+    "register:guild": "node scripts/register-commands.js",
+    "list:guild": "node scripts/register-commands.js --list",
+    "clear:guild": "node scripts/register-commands.js --clear",
+    "build": "npm run register:guild"
+  },
+  "dependencies": {
+    "undici": "^6.19.8",
+    "@supabase/supabase-js": "^2.43.4",
+    "discord-interactions": "^3.4.0"
+  }
+}
