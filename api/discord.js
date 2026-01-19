@@ -858,7 +858,7 @@ if (cmd === "lottery_updates_role") {
 if (cmd === "balance") {
   await deferPublicInteraction(body); // או public
   const u = await getUser(userId);
-await editOriginal(body, { content: `💰 ${username}, היתרה שלך: **${fmtN(u.balance)}** בוטיאלים` });
+await editOriginal(body, { content: `Not enough balance. You have ${fmtN(u.balance ?? 100)}.` });
   return { statusCode: 200, body: "" };
 }
 
@@ -928,7 +928,7 @@ if (cmd === "coinflip") {
 
     const u = await getUser(userId);
     if (amount > (u.balance ?? 100)) {
-      await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים. היתרה: ${fmtN(u.balance ?? 100)}.` });
+await editOriginal(body, { content: `Not enough balance. You have ${fmtN(u.balance ?? 100)}.` });
       return { statusCode: 200, body: "" };
     }
 
@@ -1154,7 +1154,7 @@ if (cmd === "roulette") {
 
   const u = await getUser(userId);
   if ((u.balance ?? 100) < amount) {
-    await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים. היתרה: ${fmtN(u.balance ?? 100)}.` });
+await editOriginal(body, { content: `Not enough balance. You have ${fmtN(u.balance ?? 100)}.` });
     return { statusCode: 200, body: "" };
   }
 
@@ -1277,9 +1277,8 @@ await deferPublicInteraction(body);
         // 2) בדיקת יתרה
         const u = await getUser(userId);
         if ((u.balance ?? 100) < amount) {
-await editOriginal(body, { content: `❌ אין לך מספיק בוטיאלים (יתרה: ${fmtN(u.balance)}).` });
-return { statusCode: 200, body: "" };
-
+          await editOriginal(body, { content: `Not enough balance. You have ${fmtN(u.balance ?? 100)}.` });
+          return { statusCode: 200, body: "" };
         }
 
         // 3) xoxxx-xTx?/xxx?x-xTx? x"x'x"xox" xx?xx-x"
@@ -1325,7 +1324,7 @@ return { statusCode: 200, body: "" };
             .single();
           if (insErr) {
             console.log("lottery insert error:", insErr);
-            await postChannelMessage(channelId, { content: `<@${userId}> ƒsÿ‹,? x?xxox" x`xTxÝxTx"x? x"x'x"xox" x-x"xcx".` });
+            await postChannelMessage(channelId, { content: `<@${userId}> Failed to open a new lottery.` });
             return { statusCode: 200, body: "" };
           }
           lot = newLot;
