@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron-lottery",
+      "schedule": "*/5 * * * *"
+    }
+  ],
+  "functions": {
+    "api/discord.js": {
+      "runtime": "nodejs18.x"
+    },
+    "api/cron-lottery.js": {
+      "runtime": "nodejs18.x"
+    }
+  }
+}
