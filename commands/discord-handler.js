@@ -339,11 +339,12 @@ function buildDiscordHandler({ getWordList }) {
   // 🟩 — כל אות שהופיעה ירוק לפחות פעם אחת
   // 🟨 — אות שהופיעה צהוב לפחות פעם אחת ועדיין לא ירוק אף פעם
   // ⬜ — אות שהופיעה רק אפור (לא הופיעה כצהוב/ירוק לעולם)
-  // מציגים רק את האותיות האפורות (שאינן במילה בכלל)
+  // 🔹 — אות שעדיין לא נוסתה בכלל
   function summarizeLetters(guesses) {
     const green = new Set();
     const yellow = new Set();
     const gray = new Set();
+    const tried = new Set();
   
     for (const g of (guesses || [])) {
       const marks = g.marks && Array.isArray(g.marks) ? g.marks : marksFromEmoji(g.emoji || "⬜⬜⬜⬜⬜");
@@ -351,6 +352,7 @@ function buildDiscordHandler({ getWordList }) {
       for (let i = 0; i < 5; i++) {
         const ch = word[i];
         if (!ch) continue;
+        tried.add(ch);
         const m = marks[i];
   
         if (m === "g") {
@@ -363,10 +365,20 @@ function buildDiscordHandler({ getWordList }) {
         }
       }
     }
-  
-    if (!gray.size) return "";
-    const list = [...gray].sort((a,b)=>a.localeCompare(b)).join(", ");
-    return `⬜: ${list}`;
+
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+    const untried = alphabet.filter((ch) => !tried.has(ch));
+
+    const lines = [];
+    if (gray.size) {
+      const grayList = [...gray].sort((a, b) => a.localeCompare(b)).join(", ");
+      lines.push(`⬜: ${grayList}`);
+    }
+    if (untried.length) {
+      lines.push(`🔹: ${untried.join(", ")}`);
+    }
+
+    return lines.join("\n");
   }
   
   
