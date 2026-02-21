@@ -193,6 +193,10 @@ function buildDiscordHandler({ getWordList }) {
   // === Number formatting (עם פסיקים, סגנון 1,000) ===
   const N_EN = new Intl.NumberFormat("en-US");
   const fmtN = (x) => N_EN.format(Math.trunc(Number(x) || 0)); // תמיד שלם, עם פסיקים
+  const WORDLE_ANSWERS_URL = "https://gist.githubusercontent.com/cfreshman/a03ef2cba789d8cf00c08f767e0fad7b/raw/c46f451920d5cf6326d550fb2d6abb1642717852/wordle-answers-alphabetical.txt";
+  const WORDLE_ANSWERS_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+  let cachedWordleAnswers = null;
+  let cachedWordleAnswersAt = 0;
   
   // yyyy-mm-dd לפי אזור זמן ישראל
   function ymdInTZ(ts = Date.now(), tz = WORDLE_TZ) {
@@ -226,6 +230,33 @@ function buildDiscordHandler({ getWordList }) {
     const get = (t) => parts.find(p => p.type === t)?.value || "00";
     return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}`;
   }
+
+  async function getWordleAnswers() {
+    const now = Date.now();
+    if (cachedWordleAnswers && (now - cachedWordleAnswersAt) < WORDLE_ANSWERS_CACHE_TTL_MS) {
+      return cachedWordleAnswers;
+    }
+
+    try {
+      const r = await fetch(WORDLE_ANSWERS_URL, { method: "GET" });
+      if (!r.ok) throw new Error(`wordle answers fetch ${r.status}`);
+
+      const text = await r.text();
+      const list = text
+        .split(/\r?\n/)
+        .map((w) => String(w).trim().toLowerCase())
+        .filter((w) => w.length === 5 && /^[a-z]{5}$/.test(w));
+
+      if (!list.length) throw new Error("wordle answers list empty");
+
+      cachedWordleAnswers = [...new Set(list)];
+      cachedWordleAnswersAt = now;
+      return cachedWordleAnswers;
+    } catch (e) {
+      if (cachedWordleAnswers?.length) return cachedWordleAnswers;
+      throw e;
+    }
+  }
   
   async function getOrCreateWordleGame(userId, ymd) {
     const { data } = await SUPABASE
@@ -234,9 +265,9 @@ function buildDiscordHandler({ getWordList }) {
   
     if (data) return data;
   
-    const { list } = await getWordList();
-    if (!list.length) throw new Error("word list empty");
-    const solution = list[Math.floor(Math.random() * list.length)];
+    const answers = await getWordleAnswers();
+    if (!answers.length) throw new Error("wordle answers empty");
+    const solution = answers[Math.floor(Math.random() * answers.length)];
   const row = {
     user_id: userId, date: ymd, solution,
     attempts: 0, finished: false, guesses: [],
